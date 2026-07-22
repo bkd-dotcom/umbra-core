@@ -15,6 +15,22 @@ from .contract import (
     evaluate_contract,
     load_contract,
 )
+from .passport import (
+    InMemoryPassportStore,
+    JsonFilePassportStore,
+    PassportError,
+    PassportStatus,
+    PassportStore,
+    evaluate as evaluate_passport,
+    gate_pr,
+    issue_passport,
+    revoke,
+)
+from .provenance import (
+    SLSA_PREDICATE_TYPE,
+    STATEMENT_TYPE,
+    to_slsa_provenance,
+)
 from .receipt import (
     build_receipt,
     public_key_b64,
@@ -22,6 +38,14 @@ from .receipt import (
     signing_key_is_ephemeral,
     verify_receipt,
     verify_signature,
+)
+from .transparency import (
+    InMemoryLogStore,
+    JsonFileLogStore,
+    LogStore,
+    TransparencyLog,
+    merkle_root,
+    verify_inclusion,
 )
 from .trust_boundary import (
     TrustBoundaryResult,
@@ -56,4 +80,25 @@ __all__ = [
     "sign",
     "public_key_b64",
     "signing_key_is_ephemeral",
+    # passport / emergency brake
+    "issue_passport",
+    "gate_pr",
+    "revoke",
+    "evaluate_passport",
+    "PassportStore",
+    "PassportStatus",
+    "PassportError",
+    "InMemoryPassportStore",
+    "JsonFilePassportStore",
+    # SLSA / in-toto provenance
+    "to_slsa_provenance",
+    "STATEMENT_TYPE",
+    "SLSA_PREDICATE_TYPE",
+    # transparency log
+    "TransparencyLog",
+    "LogStore",
+    "InMemoryLogStore",
+    "JsonFileLogStore",
+    "merkle_root",
+    "verify_inclusion",
 ]

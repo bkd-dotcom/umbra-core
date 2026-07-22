@@ -1,0 +1,18 @@
+version: 1
+task_type: dependency-remediation
+allowed_paths:
+  - package.json
+  - package-lock.json
+forbidden_paths:
+  - deploy.yml
+  - "**/deploy.y*ml"
+  - "**/.env*"
+  - "**/*secret*"
+  - stolen.txt
+max_files_changed: 2
+required_checks:
+  - "true"
+network: deny
+authority_on_success: branch_pr_only
+policy_owner: acme-platform
+policy_version: "1.0"
