@@ -82,6 +82,13 @@ def _is_code_executing(cmd: str) -> bool:
     return any(p.match(norm) for p in _CODE_EXECUTING_PROFILES)
 
 
+def _require_sandbox() -> bool:
+    """When ``UMBRA_REQUIRE_SANDBOX`` is truthy, code-executing checks are refused
+    (blocked) unless a real filesystem/network sandbox is available — fail closed
+    instead of degrading to host-restricted."""
+    return os.getenv("UMBRA_REQUIRE_SANDBOX", "").strip().lower() in {"1", "true", "yes"}
+
+
 def _output_hash(text: str) -> str:
     return "sha256:" + hashlib.sha256((text or "").encode("utf-8", "replace")).hexdigest()
 
@@ -251,6 +258,16 @@ def run_required_checks(repo_path: Path | str, commands: list[str]) -> ChecksRep
         argv = shlex.split(cmd)
         if not shutil.which(argv[0]):
             report.results.append(CheckResult(cmd, "unavailable", None, None, f"`{argv[0]}` is not available in this environment."))
+            every_ok = False
+            continue
+        # Strict sandbox mode: refuse to execute repo-supplied build code when no
+        # real sandbox is available (fail closed instead of degrading to host).
+        if _require_sandbox() and _is_code_executing(cmd) and enforcement != "sandboxed":
+            report.results.append(CheckResult(
+                cmd, "blocked", None, None,
+                f"UMBRA_REQUIRE_SANDBOX is set and no filesystem/network sandbox is available "
+                f"(enforcement: {enforcement}); refusing to run repo-supplied build code.",
+            ))
             every_ok = False
             continue
         try:
