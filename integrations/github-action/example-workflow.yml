@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0   # full history so the base commit is reachable for the diff
 
       - name: Umbra Admission
-        uses: bkd-dotcom/umbra-core/integrations/github-action@main
+        uses: bkd-dotcom/umbra-action@v1
         with:
           min-authority: "1"          # require at least Analyze; set "2" to require branch-PR
           # agent: "claude-code"       # optionally run a real agent; needs its auth as a secret

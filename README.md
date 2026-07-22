@@ -46,7 +46,7 @@ pip install umbra-core
 |---|---|---|
 | **PyPI package** | anything you script | `pip install umbra-core` |
 | **CLI + git hook** | the agent on your machine | `umbra admit . --mission "..." --agent claude-code` |
-| **GitHub Action** | **every** agent's PR (Claude Code, Codex, Cursor, Copilot, Devin) | drop [`umbra.yml`](integrations/github-action/example-workflow.yml) |
+| **GitHub Action** | **every** agent's PR (Claude Code, Codex, Cursor, Copilot, Devin) | [`bkd-dotcom/umbra-action@v1`](https://github.com/bkd-dotcom/umbra-action) |
 | **MCP server** | agents that speak MCP | `python -m umbra_core.mcp_server` |
 | **Hosted API** | any CI/agent that posts a change | see [umbra.engineer](https://umbra.engineer) |
 
