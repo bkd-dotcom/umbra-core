@@ -55,6 +55,60 @@ Enable agents via environment flags (off by default, fail-closed):
 - `UMBRA_ENABLE_CODEX_CLI=true` (+ `codex login`)
 - `UMBRA_ENABLE_CLAUDE_CODE=true` (+ authenticated `claude` CLI)
 
+## The admission pipeline
+
+One governed, deterministic pipeline runs before any change is trusted — and it
+is **identical for every executor**, so the verdict depends only on the evidence
+the run produced, never on which agent ran:
+
+```
+load executable contract (.umbra/admission.yaml)
+  → redact untrusted repository text on disk (README / AGENTS.md / CLAUDE.md / …)
+  → run required checks on the BASE commit (isolated worktree: regression vs pre-existing)
+  → run the bounded task via ANY Executor in a disposable checkout
+  → evaluate the changeset against the contract (deterministic, outside the model)
+  → re-run required checks on the CHANGED tree (allowlisted profiles, secret-stripped env)
+  → independently verify it (the patch-writer can't self-approve)
+  → grant only the authority the run EARNED (0 observe · 1 analyze · 2 branch-PR)
+  → seal it in an Ed25519-signed Remediation Receipt
+```
+
+```python
+from pathlib import Path
+from umbra_core import get_executor, run_admission, build_receipt, verify_receipt
+
+agent = get_executor("claude-code")
+report = run_admission(
+    repo_path=Path(checkout),
+    repo_label="acme/app",
+    mission="update the vulnerable dependency to its fixed version; change only manifests",
+    executor=agent,
+)
+print(report.authority_level, report.authority)   # e.g. 2 branch_pr
+print(report.outcome)
+
+# seal + independently verify the signed receipt
+envelope = build_receipt(
+    repo=report.repo, base_commit=report.base_commit, contract=report.contract,
+    contract_result=report.contract_result, verifier=report.verifier,
+    trust_boundary=report.trust_boundary, proposed_change=report.proposed_change,
+    providers=report.providers, authority_level=report.authority_level,
+    authority=report.authority, executor=report.executor, diff=report.diff,
+    checks=report.checks, model_identity=report.model_identity, outcome=report.outcome,
+)
+assert verify_receipt(envelope)["verified"] is True   # issued by this instance, untampered
+```
+
+Earned authority is a **result of evidence, never a setting**: a forbidden-path
+change or an introduced secret caps at `observe (0)`; an in-scope change whose
+required checks didn't run/pass caps at `analyze (1)`; only a clean, in-scope,
+checks-passed, independently-verified change earns `branch_pr (2)`. `auto_merge`
+is false at every level.
+
+Set `UMBRA_SIGNING_KEY` (base64 of >=32 raw bytes) for a stable production
+signing key; without it a deterministic dev key is used and every receipt is
+honestly flagged `key_ephemeral`.
+
 ## Run from source
 
 ```bash
@@ -66,9 +120,9 @@ uv run pytest        # hermetic — no real agent invoked, no network
 ## Status
 
 Early. This repo extracts the governance core of [Umbra](https://umbra.engineer)
-into an agent-agnostic package. The executor layer is first; the admission
+into an agent-agnostic package. The executor layer and the full admission
 pipeline (contract → trust boundary → checks → verifier → earned authority →
-Ed25519-signed receipt) follows.
+Ed25519-signed receipt) are in place and driven by any `Executor`.
 
 ## License
 
