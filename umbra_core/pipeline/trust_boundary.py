@@ -126,9 +126,11 @@ def _excerpt(text: str) -> str:
 def scan_text(text: str, source: str) -> list[QuarantineFinding]:
     """Scan a blob of untrusted text; return quarantine findings (line-addressed).
 
-    Matches over a sliding window of up to 3 consecutive lines against NFKC-folded
-    text, so single-newline splits and homoglyph/case tricks don't evade detection.
-    Each window match records the FIRST line of the window (one finding per line).
+    Three layers: (1) imperative PATTERNS over a normalized 3-line window (defeats
+    homoglyph/case/single-newline evasion), (2) structural carriers (hidden
+    unicode, HTML-comment/base64 directives, role fences) via :func:`scan_structural`,
+    and (3) an optional semantic classifier (off by default;
+    :func:`register_semantic_classifier`) for wording the patterns miss.
     """
     findings: list[QuarantineFinding] = []
     if not text:
@@ -149,22 +151,172 @@ def scan_text(text: str, source: str) -> list[QuarantineFinding]:
         findings.append(QuarantineFinding(
             source=source, line=line_no, category=category, excerpt=excerpt, pattern=label,
         ))
+    findings.extend(scan_structural(text, source))
+    findings.extend(_run_semantic_classifier(text, source))
+    # De-duplicate by (line, category) so a line flagged by multiple layers appears once.
+    seen: set[tuple[int, str]] = set()
+    deduped: list[QuarantineFinding] = []
+    for f in sorted(findings, key=lambda x: (x.line, x.category)):
+        key = (f.line, f.category)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(f)
+    return deduped
+
+
+# --- Structural injection carriers ------------------------------------------
+# These flag the *carrier* of an injection regardless of the wording inside it —
+# a determined attacker who paraphrases around the imperative patterns still has
+# to smuggle the text in somehow, and hidden/obfuscated carriers are themselves
+# a strong signal in repository prose.
+_ZERO_WIDTH = "\u200b\u200c\u200d\u2060\ufeff"           # zero-width space/joiner/BOM
+_BIDI = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"  # bidi overrides/isolates
+_HTML_COMMENT = re.compile(r"<!--(.*?)-->", re.S)
+_ROLE_FENCE = re.compile(r"(<\|?\s*(system|assistant|developer)\s*\|?>|```+\s*(system|assistant)\b|^\s*(system|assistant)\s*:)", re.I | re.M)
+_LONG_B64 = re.compile(r"[A-Za-z0-9+/]{200,}={0,2}")
+_IMPERATIVE_HINT = re.compile(r"\b(ignore|instruction|instructions|system|you must|agent|execute|run|delete|secret|token|deploy|backdoor|exfiltrat)", re.I)
+
+
+def _line_of_offset(text: str, offset: int) -> int:
+    return text.count("\n", 0, offset) + 1
+
+
+# --- Optional semantic (LLM) classifier hook --------------------------------
+# A pluggable second opinion for wording the deterministic layers miss. It is a
+# callable (text, source) -> list of finding dicts, each with at least
+# {"line": int, "category": str, "excerpt": str, "pattern": str}. OFF by default —
+# no network/model is invoked unless a classifier is registered. This keeps the
+# core deterministic and free while allowing defense-in-depth when wired up.
+SemanticClassifier = "Callable[[str, str], list[dict]]"  # doc alias
+_SEMANTIC_CLASSIFIER = None
+
+
+def register_semantic_classifier(fn) -> None:
+    """Register (or clear, with ``None``) the optional semantic classifier."""
+    global _SEMANTIC_CLASSIFIER
+    _SEMANTIC_CLASSIFIER = fn
+
+
+def _run_semantic_classifier(text: str, source: str) -> list["QuarantineFinding"]:
+    fn = _SEMANTIC_CLASSIFIER
+    if fn is None or not text:
+        return []
+    try:
+        raw = fn(text, source) or []
+    except Exception:  # noqa: BLE001 - a classifier failure must never break admission
+        return []
+    out: list[QuarantineFinding] = []
+    for item in raw:
+        try:
+            out.append(QuarantineFinding(
+                source=source,
+                line=int(item.get("line", 0) or 0),
+                category=str(item.get("category", "semantic")),
+                excerpt=_excerpt(str(item.get("excerpt", ""))),
+                pattern=str(item.get("pattern", "semantic classifier")),
+            ))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def scan_structural(text: str, source: str) -> list[QuarantineFinding]:
+    """Flag structural injection carriers: zero-width/bidi unicode, hidden HTML
+    comments carrying imperatives, role-prompt fences, and long base64 blobs whose
+    decode contains imperative words. Wording-independent — complements the pattern
+    scan."""
+    findings: list[QuarantineFinding] = []
+    if not text:
+        return findings
+
+    # Zero-width / bidi control characters — almost never legitimate in repo prose
+    # and a classic way to hide/obfuscate instructions.
+    for idx, ch in enumerate(text):
+        if ch in _ZERO_WIDTH or ch in _BIDI:
+            findings.append(QuarantineFinding(
+                source=source, line=_line_of_offset(text, idx),
+                category="obfuscation", excerpt="(zero-width or bidi control character)",
+                pattern="hidden unicode control character",
+            ))
+            break  # one is enough to flag the file's presence of obfuscation
+
+    # HTML comments carrying an imperative (the classic "hidden note to the AI").
+    for m in _HTML_COMMENT.finditer(text):
+        inner = m.group(1) or ""
+        if _IMPERATIVE_HINT.search(_normalize(inner)):
+            findings.append(QuarantineFinding(
+                source=source, line=_line_of_offset(text, m.start()),
+                category="hidden_directive", excerpt=_excerpt(inner),
+                pattern="imperative inside an HTML comment",
+            ))
+
+    # Role-prompt fences masquerading as system/assistant turns.
+    for m in _ROLE_FENCE.finditer(text):
+        findings.append(QuarantineFinding(
+            source=source, line=_line_of_offset(text, m.start()),
+            category="system_prompt_marker", excerpt=_excerpt(m.group(0)),
+            pattern="role-prompt fence (system/assistant)",
+        ))
+
+    # Long base64 blobs whose decoded content contains imperative words.
+    import base64 as _b64
+    for m in _LONG_B64.finditer(text):
+        blob = m.group(0)
+        try:
+            decoded = _b64.b64decode(blob + "=" * (-len(blob) % 4), validate=False).decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001
+            continue
+        if _IMPERATIVE_HINT.search(_normalize(decoded)):
+            findings.append(QuarantineFinding(
+                source=source, line=_line_of_offset(text, m.start()),
+                category="encoded_directive", excerpt=_excerpt(decoded),
+                pattern="imperative inside a base64 blob",
+            ))
     return findings
 
 
 _REDACTION = "[Umbra: line quarantined as untrusted repository content — excluded from the agent's task context]"
+_FULL_REDACTION = (
+    "[Umbra: this untrusted instruction file was fully quarantined — its entire "
+    "contents are treated as data and withheld from the agent's task context.]\n"
+)
+
+# Categories that indicate a hidden/obfuscated/encoded carrier. Their presence
+# escalates to FULL-FILE quarantine even in default mode, because line-level
+# redaction can't be trusted once the file is actively trying to hide content.
+_ESCALATE_CATEGORIES = frozenset({"obfuscation", "hidden_directive", "encoded_directive"})
+
+
+def _quarantine_mode() -> str:
+    """``full`` quarantines the entire untrusted file whenever ANY finding exists;
+    ``line`` (default) redacts only flagged lines but still escalates to full-file
+    when a hidden/encoded carrier is detected. Set ``UMBRA_QUARANTINE_MODE=full``
+    for the strongest posture (detection completeness stops mattering)."""
+    import os
+    return "full" if os.getenv("UMBRA_QUARANTINE_MODE", "line").strip().lower() == "full" else "line"
 
 
 def sanitize_text(text: str, source: str) -> tuple[str, int]:
-    """Return ``text`` with every flagged line replaced by a redaction marker, plus
-    the count redacted. This is the concrete quarantine: the sanitized text is what
-    Umbra hands to the coding agent as context, so agent-directed manipulation in
-    the original never reaches the agent's writable-task context."""
+    """Return ``text`` with untrusted manipulation quarantined, plus the count of
+    redacted lines. The sanitized text is what Umbra hands the agent as context.
+
+    In ``line`` mode (default) flagged lines are replaced with a marker. The whole
+    file is quarantined instead when (a) ``UMBRA_QUARANTINE_MODE=full`` or (b) a
+    hidden/obfuscated/encoded carrier was found — because once a file is actively
+    hiding content, per-line redaction can't be trusted."""
     if not text:
         return text, 0
-    flagged_lines = {f.line for f in scan_text(text, source)}
-    if not flagged_lines:
+    findings = scan_text(text, source)
+    if not findings:
         return text, 0
+
+    escalate = _quarantine_mode() == "full" or any(f.category in _ESCALATE_CATEGORIES for f in findings)
+    if escalate:
+        # Full-file quarantine: the agent sees only the marker. Count = all lines.
+        total = len(text.splitlines()) or 1
+        return _FULL_REDACTION, total
+
+    flagged_lines = {f.line for f in findings}
     out: list[str] = []
     for line_no, line in enumerate(text.splitlines(), start=1):
         out.append(_REDACTION if line_no in flagged_lines else line)

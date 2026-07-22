@@ -49,8 +49,10 @@ from .transparency import (
 )
 from .trust_boundary import (
     TrustBoundaryResult,
+    register_semantic_classifier,
     sanitize_checkout,
     scan_repository_text,
+    scan_structural,
     scan_text,
 )
 from .verifier import VerifierReport, verify_change
@@ -71,6 +73,8 @@ __all__ = [
     "TrustBoundaryResult",
     "scan_repository_text",
     "scan_text",
+    "scan_structural",
+    "register_semantic_classifier",
     "sanitize_checkout",
     "VerifierReport",
     "verify_change",

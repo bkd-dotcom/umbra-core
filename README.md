@@ -165,6 +165,9 @@ is false at every level.
   A **code-executing** check (`npm/pip/yarn install`, `go/cargo build`) that runs
   un-sandboxed **caps authority at L1** (`checks.unsandboxed_code_execution`), so
   branch-PR is never earned on untrusted build code that ran with host fs/network.
+  Set **`UMBRA_REQUIRE_SANDBOX=true`** to fail closed instead — such checks are
+  *blocked* (not run) unless a real sandbox is available. The GitHub Action
+  installs bubblewrap on Linux runners so the default there is `sandboxed`.
 - **The verifier's *blocking* checks are contract-compliance and secret-scan.**
   Advisory-cleared, tests, and citations are *advisory evidence* that lower
   `evidence_completeness` when missing but do not by themselves block. Blocking is
@@ -208,10 +211,30 @@ Note: with a current Claude Code, the ungoverned run may *refuse* the injection 
 its own — in which case governance is defense in depth rather than the sole line
 of defense. The value is that the outcome does not depend on the agent's choice.
 
-Honest scope: the detector catches *tested* manipulation patterns — it is a
-mitigation, not a claim to defeat all prompt injection. The durable protection is
-the architecture around it (redaction on disk + contract + independent verifier +
-earned-authority cap), which holds even when a novel phrasing evades the detector.
+Detection is layered so no single technique has to be complete:
+
+1. **Imperative patterns** over NFKC-normalized, case-folded text across a 3-line
+   window — defeats homoglyph, case, and single-newline evasion.
+2. **Structural carriers** (wording-independent): hidden zero-width/bidi unicode,
+   imperatives inside HTML comments, role-prompt fences (`<|system|>`), and long
+   base64 blobs that decode to imperatives.
+3. **Optional semantic classifier** — register your own LLM-backed second opinion
+   with `register_semantic_classifier(fn)` (off by default; no network/cost unless
+   enabled). A classifier failure never breaks admission.
+
+And two architecture-level defenses that don't depend on detection completeness:
+
+- **Full-file quarantine escalation:** when a *hidden/obfuscated/encoded* carrier
+  is found (or `UMBRA_QUARANTINE_MODE=full`), the **entire** untrusted file is
+  withheld from the agent — so a partially-missed injection can't leak through the
+  un-redacted remainder.
+- The change is still bounded by the contract, the independent verifier, and the
+  earned-authority cap regardless of what the detector saw.
+
+Honest scope: no detector defeats *all* prompt injection. The durable protection
+is the architecture (on-disk redaction / full-file quarantine + contract +
+independent verifier + earned-authority cap), which holds even when a novel
+phrasing evades every detection layer.
 
 ## Earned-authority passport + Emergency Brake
 
