@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/bkd-dotcom/umbra-core/security/advisories/new
+    about: Please report vulnerabilities privately — do not open a public issue.
+  - name: GitHub Action (Umbra Admission)
+    url: https://github.com/bkd-dotcom/umbra-action/issues
+    about: Issues with the Marketplace GitHub Action belong in the umbra-action repo.

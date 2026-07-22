@@ -1,0 +1,44 @@
+name: Bug report
+description: Report incorrect behavior in the admission pipeline, CLI, or executors.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For **security vulnerabilities** (scope bypass, authority escalation,
+        receipt forgery, secret exposure) do NOT use this form — see
+        [SECURITY.md](https://github.com/bkd-dotcom/umbra-core/security/policy).
+  - type: input
+    id: version
+    attributes:
+      label: umbra-core version
+      placeholder: "0.1.3 (pip show umbra-core)"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options: [Python API (run_admission), CLI (umbra ...), GitHub Action, MCP server, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you observe, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A minimal repro — the `.umbra/admission.yaml`, changed files, command, and output/receipt.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "macOS 14 / ubuntu-latest / Windows; Python 3.12"
