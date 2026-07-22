@@ -1,0 +1,30 @@
+version: 1
+task_type: library-change
+# umbra-core governs its own pull requests with this contract. It bounds what an
+# agent's change may touch and requires the suite to pass to earn branch-PR
+# authority. Scope is generous (this is a library repo) but fails closed on the
+# things an untrusted change must never touch.
+allowed_paths:
+  - "umbra_core/**"
+  - "tests/**"
+  - "demos/**"
+  - "integrations/**"
+  - "docs/**"
+  - ".umbra/**"
+  - "*.md"
+  - "pyproject.toml"
+  - "Makefile"
+  - "uv.lock"
+  - ".github/**"
+forbidden_paths:
+  - "**/.env*"
+  - "**/*secret*"
+  - "**/id_rsa*"
+  - "**/*.pem"
+max_files_changed: 60
+required_checks:
+  - "pytest"
+network: deny
+authority_on_success: branch_pr_only
+policy_owner: bkd-dotcom
+policy_version: "1.0"

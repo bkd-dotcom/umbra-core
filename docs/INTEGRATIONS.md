@@ -58,8 +58,8 @@ jobs:
   admit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with: { ref: ${{ github.event.pull_request.head.sha }} }
+      - uses: actions/checkout@v5
+        with: { ref: ${{ github.event.pull_request.head.sha }}, fetch-depth: 0 }
       - uses: bkd-dotcom/umbra-core/integrations/github-action@main
         with:
           min-authority: "1"

@@ -12,6 +12,7 @@ from typing import Callable
 from .base import Executor
 from .claude_code import ClaudeCodeExecutor
 from .codex import CodexExecutor
+from .null import NullExecutor
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -19,6 +20,7 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 _REGISTRY: dict[str, Callable[[Runner], Executor]] = {
     "codex-cli": lambda runner: CodexExecutor(runner=runner),
     "claude-code": lambda runner: ClaudeCodeExecutor(runner=runner),
+    "none": lambda runner: NullExecutor(),  # govern an existing working-tree change
 }
 
 
@@ -36,13 +38,14 @@ def get_executor(name: str, runner: Runner = subprocess.run) -> Executor:
 
 
 def resolve_available(preferred: list[str] | None = None, runner: Runner = subprocess.run) -> Executor | None:
-    """Return the first *available* executor, honoring an optional preference
-    order. Returns None when no agent can run here (caller falls back to the
-    deterministic path or caps authority).
+    """Return the first *available* real coding agent, honoring an optional
+    preference order. Returns None when no agent can run here (caller falls back
+    or caps authority). The ``none`` (NullExecutor) is never auto-selected — it
+    must be requested explicitly, since it produces no change.
     """
-    order = preferred or available_executors()
+    order = preferred or [n for n in available_executors() if n != "none"]
     for name in order:
-        if name not in _REGISTRY:
+        if name not in _REGISTRY or name == "none":
             continue
         executor = _REGISTRY[name](runner)
         if executor.available():

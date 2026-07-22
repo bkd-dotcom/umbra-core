@@ -47,6 +47,21 @@ runs:
       shell: bash
       run: pip install umbra-core
 
+    - name: Stage the PR change as a working-tree diff
+      id: stage
+      shell: bash
+      run: |
+        # umbra evaluates the working-tree diff (git diff vs HEAD). For a PR we
+        # reset to the base commit but keep the PR's changes in the working tree,
+        # so `git diff` shows exactly what the agent proposed against base.
+        if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA" || true
+          # Soft-reset to base: HEAD moves to base, index+worktree keep PR content,
+          # so `git diff` == the PR's net change against base.
+          git reset --soft "$BASE_SHA" 2>/dev/null && git restore --staged . 2>/dev/null || true
+        fi
+
     - name: Run admission
       id: admit
       shell: bash
@@ -56,10 +71,11 @@ runs:
         UMBRA_ENABLE_CODEX_CLI: ${{ inputs.agent == 'codex-cli' && 'true' || 'false' }}
       run: |
         set -e
-        AGENT_ARG=""
+        # Default to the NullExecutor ('none'): govern the change already present
+        # in the working tree (the PR diff) without re-invoking any agent. A
+        # forced --agent re-runs that agent instead.
+        AGENT_ARG="--agent none"
         if [ -n "${{ inputs.agent }}" ]; then AGENT_ARG="--agent ${{ inputs.agent }}"; fi
-        # Review the checked-out PR head. When no agent is forced, admission runs
-        # deterministically over the existing working tree diff against the base.
         umbra --json admit . \
           --mission "${{ inputs.mission }}" \
           --label "${GITHUB_REPOSITORY}" \
@@ -74,7 +90,7 @@ runs:
 
     - name: Upload receipt artifact
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: umbra-receipt
         path: |

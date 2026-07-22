@@ -15,6 +15,7 @@ from umbra_core import (
     CodexExecutor,
     ExecutionResult,
     Executor,
+    NullExecutor,
     available_executors,
     get_executor,
     resolve_available,
@@ -65,9 +66,10 @@ def test_both_executors_satisfy_protocol():
 
 
 def test_registry_lists_and_resolves():
-    assert set(available_executors()) == {"codex-cli", "claude-code"}
+    assert set(available_executors()) == {"codex-cli", "claude-code", "none"}
     assert isinstance(get_executor("codex-cli"), CodexExecutor)
     assert isinstance(get_executor("claude-code"), ClaudeCodeExecutor)
+    assert isinstance(get_executor("none"), NullExecutor)
 
 
 def test_registry_unknown_raises():
@@ -78,7 +80,20 @@ def test_registry_unknown_raises():
 def test_resolve_available_none_when_disabled(monkeypatch):
     monkeypatch.delenv("UMBRA_ENABLE_CODEX_CLI", raising=False)
     monkeypatch.delenv("UMBRA_ENABLE_CLAUDE_CODE", raising=False)
+    # NullExecutor is always available but must NEVER be auto-selected.
     assert resolve_available(runner=FakeRunner({})) is None
+
+
+def test_null_executor_makes_no_change_and_is_protocol():
+    ex = NullExecutor()
+    assert isinstance(ex, Executor)
+    assert ex.available() is True
+    assert ex.name == "none"
+    result = ex.propose("review", Path("/tmp"))
+    assert result.executor == "none"
+    assert result.diff == ""
+    assert result.files == []
+    assert result.model_identity["model_evidence"] == "no-model"
 
 
 # --- availability gating ----------------------------------------------------
