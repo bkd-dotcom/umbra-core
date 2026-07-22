@@ -1,5 +1,10 @@
 # umbra-core
 
+[![PyPI](https://img.shields.io/pypi/v/umbra-core.svg)](https://pypi.org/project/umbra-core/)
+[![CI](https://github.com/bkd-dotcom/umbra-core/actions/workflows/ci.yml/badge.svg)](https://github.com/bkd-dotcom/umbra-core/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/umbra-core.svg)](https://pypi.org/project/umbra-core/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **An agent-agnostic change-control plane for coding agents.**
 
 Coding agents can now change your repository. `umbra-core` is the layer that
