@@ -46,7 +46,11 @@ def signing_seed() -> bytes:
         try:
             seed = base64.b64decode(provided)
             if len(seed) >= 32:
-                return seed[:32]
+                candidate = seed[:32]
+                # Reject obviously weak seeds so a copy-pasted "default" can't be
+                # trusted as a production key.
+                if candidate != b"\x00" * 32:
+                    return candidate
         except Exception:  # noqa: BLE001 - malformed env → dev seed
             pass
     return hashlib.sha256(b"umbra-core-dev-insecure-signing-seed").digest()
@@ -58,7 +62,8 @@ def signing_key_is_ephemeral() -> bool:
     if not provided:
         return True
     try:
-        return len(base64.b64decode(provided)) < 32
+        seed = base64.b64decode(provided)
+        return len(seed) < 32 or seed[:32] == b"\x00" * 32
     except Exception:  # noqa: BLE001
         return True
 
@@ -177,6 +182,13 @@ def verify_receipt(envelope: dict[str, Any], *, expected_public_key: str | None 
     signature **against the pinned public key** (``expected_public_key`` or this
     instance's key) — NOT the key embedded in the envelope. ``issued_by_umbra`` is
     true only when the signature verifies against the pinned key.
+
+    Security: if no ``expected_public_key`` is given AND this instance is using
+    the deterministic dev-fallback key (``UMBRA_SIGNING_KEY`` unset/invalid), we
+    REFUSE to verify — the dev key's seed is public in the source tree, so
+    anyone could mint a "valid" receipt. A real verification requires either an
+    explicit pinned key or a production ``UMBRA_SIGNING_KEY``. Also requires the
+    envelope to carry a ``canonical_hash`` (no hash → not verified).
     """
     receipt = envelope.get("receipt")
     signature = envelope.get("signature")
@@ -185,6 +197,18 @@ def verify_receipt(envelope: dict[str, Any], *, expected_public_key: str | None 
     if not isinstance(receipt, dict) or not signature:
         return {"verified": False, "hash_matches": False, "signature_valid": False,
                 "issued_by_umbra": False, "reason": "Receipt or signature missing."}
+
+    # Fail closed when the pinned key would be the public dev-fallback key.
+    if expected_public_key is None and signing_key_is_ephemeral():
+        return {
+            "verified": False, "hash_matches": False, "signature_valid": False,
+            "issued_by_umbra": False, "key_ephemeral": True,
+            "reason": (
+                "Refusing to verify against the dev-fallback key (its seed is public). "
+                "Set a production UMBRA_SIGNING_KEY, or pass expected_public_key/--public-key "
+                "to verify against a known key."
+            ),
+        }
 
     pinned_key = expected_public_key or public_key_b64()
     canonical = _canonical(receipt)
@@ -195,7 +219,9 @@ def verify_receipt(envelope: dict[str, Any], *, expected_public_key: str | None 
     key_matches = bool(embedded_key) and embedded_key == pinned_key
 
     return {
-        "verified": bool(issued_by_umbra and (hash_matches or not claimed_hash)),
+        # Require BOTH a valid signature against the pinned key AND a matching
+        # claimed hash. A receipt with no canonical_hash is not considered verified.
+        "verified": bool(issued_by_umbra and hash_matches),
         "issued_by_umbra": issued_by_umbra,
         "signature_valid": issued_by_umbra,
         "hash_matches": hash_matches,
