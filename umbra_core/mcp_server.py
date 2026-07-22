@@ -33,10 +33,36 @@ from . import (
 )
 
 
+def _allowed_roots() -> list[Path]:
+    """Directories the MCP server may operate under, from ``UMBRA_MCP_ROOTS``
+    (os.pathsep-separated). Empty/unset means unrestricted (a warning is logged).
+    Scoping the server prevents an agent from pointing ``umbra_admit`` at an
+    arbitrary host directory (e.g. ``/``)."""
+    import os
+    raw = os.getenv("UMBRA_MCP_ROOTS", "").strip()
+    if not raw:
+        return []
+    return [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
+
+
+def _within_allowed(root: Path) -> bool:
+    allowed = _allowed_roots()
+    if not allowed:
+        import logging
+        logging.getLogger("umbra.mcp").warning(
+            "UMBRA_MCP_ROOTS is not set — umbra_admit will accept ANY path. Set it to "
+            "restrict the server to specific workspaces."
+        )
+        return True
+    return any(root == a or a in root.parents for a in allowed)
+
+
 def _admit(repo_path: str, mission: str, agent: str | None = None, label: str | None = None) -> dict[str, Any]:
-    root = Path(repo_path).resolve()
+    root = Path(repo_path).expanduser().resolve()
     if not root.is_dir():
         return {"error": f"{root} is not a directory"}
+    if not _within_allowed(root):
+        return {"error": f"{root} is outside the allowed roots (UMBRA_MCP_ROOTS). Refused."}
     if agent:
         executor = get_executor(agent)
         if not executor.available():

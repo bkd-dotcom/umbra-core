@@ -37,13 +37,26 @@ logger = logging.getLogger("umbra.executor.claude")
 # Tools that would let the agent push, merge, or otherwise self-grant authority.
 # Refused at the CLI layer so a governed run can only ever propose a change.
 _DISALLOWED_TOOLS = [
+    # Push / publish / merge — an agent must never self-merge or publish.
     "Bash(git push:*)",
     "Bash(git commit:*)",
     "Bash(git merge:*)",
     "Bash(git rebase:*)",
-    "Bash(gh pr *)",
-    "Bash(gh pr create:*)",
-    "Bash(git remote *)",
+    "Bash(git remote:*)",
+    "Bash(gh pr:*)",
+    "Bash(gh api:*)",
+    "Bash(gh release:*)",
+    "Bash(gh workflow:*)",
+    "Bash(gh secret:*)",
+    "Bash(gh auth:*)",
+    # Network / exfiltration primitives.
+    "Bash(curl:*)",
+    "Bash(wget:*)",
+    "Bash(nc:*)",
+    "Bash(ncat:*)",
+    "Bash(ssh:*)",
+    "Bash(scp:*)",
+    "Bash(rsync:*)",
     "WebFetch",
 ]
 

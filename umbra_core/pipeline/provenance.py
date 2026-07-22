@@ -122,10 +122,15 @@ def to_slsa_provenance(envelope: dict[str, Any]) -> dict[str, Any]:
                 "trust_boundary_quarantined": trust_boundary.get("quarantined_count"),
                 "auto_merge": False,
                 "human_review_required": True,
+                # Prominent trust flag: a receipt signed with the dev-fallback key
+                # is NOT trustworthy provenance (its seed is public). Stamped here
+                # so a SLSA consumer never treats an ephemeral-key statement as
+                # attested provenance.
+                "key_ephemeral": bool(envelope.get("key_ephemeral")),
+                "provenance_trustworthy": not bool(envelope.get("key_ephemeral")),
                 "signature": envelope.get("signature"),
                 "public_key": envelope.get("public_key"),
                 "signature_algorithm": envelope.get("algorithm", "Ed25519"),
-                "key_ephemeral": envelope.get("key_ephemeral"),
             },
         },
     }

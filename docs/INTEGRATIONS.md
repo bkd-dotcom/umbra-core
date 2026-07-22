@@ -83,6 +83,11 @@ then call `umbra_admit`, `umbra_verify`, and `umbra_provenance` to run its own
 change through the deterministic pipeline *before* proposing it — the verdict is
 still produced outside the model.
 
+**Scope the server:** set `UMBRA_MCP_ROOTS` (os.pathsep-separated absolute
+directories) so `umbra_admit` only operates under your workspaces. Without it the
+server accepts any path and logs a warning — an agent could otherwise point it at
+an arbitrary host directory.
+
 ## 5. Hosted API + dashboard
 
 The reference hosted deployment is [Umbra](https://umbra.engineer). To self-host,

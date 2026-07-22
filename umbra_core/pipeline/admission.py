@@ -166,12 +166,27 @@ def _run_baseline_checks_isolated(repo_path: Path, base_commit: str | None, comm
             )
             if r.returncode == 0 and wt.is_dir():
                 target, worktree_added = wt, True
-        if target is None:
-            cp = tmp / "copy"
+        if target is None and base_commit:
+            # Fallback: `git archive` respects .gitignore, does not follow symlinks
+            # out of the tree, and won't drag node_modules/.venv/caches into the
+            # copy (unlike copytree). Extract the base commit's tracked tree only.
+            cp = tmp / "archive"
+            cp.mkdir(parents=True, exist_ok=True)
             try:
-                shutil.copytree(repo_path, cp, ignore=shutil.ignore_patterns(".git"))
-                target = cp
-            except OSError:
+                proc = subprocess.run(
+                    ["git", "archive", "--format=tar", base_commit],
+                    cwd=repo_path, capture_output=True, check=False,
+                )
+                if proc.returncode == 0 and proc.stdout:
+                    import io
+                    import tarfile
+                    with tarfile.open(fileobj=io.BytesIO(proc.stdout)) as tar:
+                        # Guard against path traversal in archive members.
+                        safe = [m for m in tar.getmembers()
+                                if not m.name.startswith("/") and ".." not in Path(m.name).parts and not m.issym() and not m.islnk()]
+                        tar.extractall(cp, members=safe)  # noqa: S202 - members filtered above
+                    target = cp
+            except (OSError, subprocess.SubprocessError, __import__("tarfile").TarError):
                 target = None
         if target is None:
             return ChecksReport()
@@ -428,6 +443,21 @@ def _decide_authority(report: AdmissionReport, contract_result, verifier_report,
             "authority so a change cannot earn L2 by weakening a previously-failing check."
         )
         report.outcome = "ADMITTED (analyze) — checks pass now but the baseline was not clean; branch-PR authority is withheld pending human validation of the check change."
+    elif checks_report.unsandboxed_code_execution:
+        # A code-executing check (npm/pip install, go/cargo build) ran WITHOUT a
+        # real sandbox (host-restricted). Untrusted build code executed with host
+        # filesystem + network, so we cannot grant branch-PR authority on its
+        # result — cap at analyze and say so plainly.
+        report.authority_level = 1
+        report.blocked_reason = (
+            "A required check executed repository-supplied build code without a filesystem/network "
+            f"sandbox (enforcement: {checks_report.enforcement}). Branch-PR authority is withheld."
+        )
+        report.outcome = (
+            "ADMITTED (analyze) — a required check ran untrusted build code un-sandboxed "
+            "(host-restricted runner). Re-run on a Linux runner with bubblewrap for sandboxed "
+            "enforcement to earn branch-PR authority."
+        )
     else:
         report.authority_level = 2
         report.outcome = "ADMITTED (branch PR) — the agent stayed in scope, required checks passed, and the change was independently verified; it may prepare a branch-only PR. Human approval is still required to merge."
