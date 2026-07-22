@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with: { ref: ${{ github.event.pull_request.head.sha }}, fetch-depth: 0 }
-      - uses: bkd-dotcom/umbra-core/integrations/github-action@main
+      - uses: bkd-dotcom/umbra-action@v1
         with:
           min-authority: "1"
           signing-key: ${{ secrets.UMBRA_SIGNING_KEY }}
