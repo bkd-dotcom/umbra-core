@@ -29,5 +29,5 @@ jobs:
       - name: Test
         run: pytest -q
 
-      - name: One-command proof (head-to-head injection demo)
+      - name: Verify prompt-injection defense (ungoverned vs governed)
         run: python demos/injection/demo.py

@@ -1,4 +1,4 @@
-.PHONY: test lint demo demo-json install
+.PHONY: test lint build verify-injection install
 
 install:
 	uv sync --extra dev || uv pip install -e ".[dev]"
@@ -9,9 +9,9 @@ test:
 lint:
 	uv run ruff check .
 
-# The one-command proof: raw agent vs. the same agent governed by umbra-core.
-demo:
-	uv run python demos/injection/demo.py
+build:
+	uv build
 
-demo-json:
-	uv run python demos/injection/demo.py --json
+# Verify the prompt-injection defense: the same agent, ungoverned vs. governed.
+verify-injection:
+	uv run python demos/injection/demo.py

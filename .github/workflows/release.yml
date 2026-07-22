@@ -1,0 +1,75 @@
+name: Release
+
+# Publishes umbra-core to PyPI when a version tag is pushed (e.g. v0.1.0).
+# Uses PyPI Trusted Publishing (OIDC) — no API token is stored as a secret.
+#
+# One-time setup on PyPI (https://pypi.org/manage/account/publishing/):
+#   Project name:      umbra-core
+#   Owner:             bkd-dotcom
+#   Repository name:   umbra-core
+#   Workflow name:     release.yml
+#   Environment name:  pypi
+#
+# Then: git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Verify the tag matches the package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(grep -m1 '^version' pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=$TAG pkg=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match pyproject version $PKG"; exit 1
+          fi
+
+      - name: Test before publishing
+        run: |
+          uv pip install --system -e ".[dev]"
+          ruff check .
+          pytest -q
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Check distribution metadata
+        run: uvx twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/umbra-core/
+    permissions:
+      id-token: write   # OIDC token for Trusted Publishing
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
