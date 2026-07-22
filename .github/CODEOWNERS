@@ -1,0 +1,15 @@
+# Code owners — automatically requested for review on matching paths.
+# See https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything.
+*                           @bkd-dotcom
+
+# Security-critical pipeline — the governance guarantees live here.
+/umbra_core/pipeline/       @bkd-dotcom
+/umbra_core/executors/      @bkd-dotcom
+
+# Release, CI, and security policy.
+/.github/workflows/         @bkd-dotcom
+/pyproject.toml             @bkd-dotcom
+/SECURITY.md                @bkd-dotcom
+/.umbra/                    @bkd-dotcom

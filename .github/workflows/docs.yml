@@ -6,7 +6,10 @@ on:
     paths:
       - "docs/site/**"
       - "mkdocs.yml"
+      - "README.md"
       - ".github/workflows/docs.yml"
+  release:
+    types: [published]   # republish the site on every release
   workflow_dispatch:
 
 permissions:
