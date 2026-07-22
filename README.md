@@ -162,6 +162,9 @@ is false at every level.
   and macOS there is usually no bubblewrap, so the tier is typically
   `host-restricted`. A repo can never run an arbitrary command (allowlisted
   profiles only), but "sandboxed" is not guaranteed everywhere — check the field.
+  A **code-executing** check (`npm/pip/yarn install`, `go/cargo build`) that runs
+  un-sandboxed **caps authority at L1** (`checks.unsandboxed_code_execution`), so
+  branch-PR is never earned on untrusted build code that ran with host fs/network.
 - **The verifier's *blocking* checks are contract-compliance and secret-scan.**
   Advisory-cleared, tests, and citations are *advisory evidence* that lower
   `evidence_completeness` when missing but do not by themselves block. Blocking is

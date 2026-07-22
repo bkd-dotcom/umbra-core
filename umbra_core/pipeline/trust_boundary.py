@@ -90,21 +90,32 @@ class TrustBoundaryResult:
 
 
 # Categorized manipulation patterns. Each is a (category, human-label, regex).
-# Intentionally conservative and specific to reduce false positives on ordinary
-# prose — we flag imperative attempts to override policy, reach secrets/network,
-# or expand file scope, which is what an agent-directed injection looks like.
+# Patterns run against NFKC-normalized, case-folded text (so homoglyphs and case
+# don't evade them) over a sliding window of up to 3 lines (so a single newline
+# in the middle of an injection doesn't break the match). Intentionally
+# conservative to limit false positives on ordinary prose.
 _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ("policy_override", "instruction to ignore prior rules/policy",
-     re.compile(r"\b(ignore|disregard|forget|override|bypass)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|the|your|any)\b[^.\n]{0,30}\b(instruction|instructions|rule|rules|policy|policies|constraint|constraints|guardrail|guardrails|prompt)\b", re.I)),
+     re.compile(r"\b(ignore|disregard|forget|override|bypass)\b[^.\n]{0,60}\b(previous|prior|above|earlier|all|the|your|any)\b[^.\n]{0,40}\b(instruction|instructions|rule|rules|policy|policies|constraint|constraints|guardrail|guardrails|prompt)\b", re.I)),
     ("secret_access", "instruction to read/exfiltrate secrets or env",
-     re.compile(r"\b(print|output|reveal|expose|exfiltrate|send|leak|read|cat|echo|dump|show)\b[^.\n]{0,40}\b(secret|secrets|api[\s_-]?key|token|password|credential|credentials|\.env|environment variable|env var)\b", re.I)),
+     re.compile(r"\b(print|output|reveal|expose|exfiltrate|send|leak|read|cat|echo|dump|show)\b[^.\n]{0,60}(secret|secrets|api[\s_-]?key|token|password|credential|credentials|\.env|environment variable|env var)", re.I)),
     ("scope_expansion", "instruction to edit protected/deployment files",
-     re.compile(r"\b(edit|modify|change|update|delete|remove|overwrite|commit|push|merge)\b[^.\n]{0,40}(deploy\.ya?ml|\.github/workflows|\.env|/etc/|dockerfile|infra/|deployment|production config|ci[\s_-]?config)", re.I)),
+     re.compile(r"\b(edit|modify|change|update|delete|remove|overwrite|commit|push|merge|add)\b[^.\n]{0,60}(deploy\.ya?ml|\.github/workflows|\.env|/etc/|dockerfile|infra/|deployment|production config|ci[\s_-]?config|backdoor)", re.I)),
     ("agent_directive", "text explicitly addressing the AI/agent to take action",
-     re.compile(r"\b(ai agent|coding agent|assistant|codex|copilot|llm|language model|you must|you should now)\b[^.\n]{0,40}\b(ignore|run|execute|delete|modify|disable|skip|bypass|must)\b", re.I)),
+     re.compile(r"\b(ai agent|coding agent|assistant|codex|copilot|claude|cursor|llm|language model|you must|you should now)\b[^.\n]{0,60}\b(ignore|run|execute|delete|modify|disable|skip|bypass|must|add|edit)\b", re.I)),
     ("command_injection", "embedded shell/exfil command directed at a tool",
-     re.compile(r"(curl\s+[^\n]*\|\s*(sh|bash)|rm\s+-rf\s+/|;\s*cat\s+[^\n]*\.env|\$\(.*(curl|wget).*\))", re.I)),
+     re.compile(r"(curl\s+[^\n]*\|\s*(sh|bash)|wget\s+[^\n]*\|\s*(sh|bash)|rm\s+-rf\s+/|;\s*cat\s+[^\n]*\.env|\$\(.*(curl|wget).*\))", re.I)),
+    ("system_prompt_marker", "text posing as a system/role prompt to the agent",
+     re.compile(r"(<\|?\s*system\s*\|?>|^\s*system\s*:|role\s*[:=]\s*[\"']?system|###\s*system|\[system\]|<!--[^>]*\b(ignore|you must|system note|ai agent|instructions?)\b)", re.I)),
 )
+
+
+def _normalize(text: str) -> str:
+    """NFKC-normalize + case-fold so homoglyph/fullwidth/case tricks don't evade
+    the detector (``Ｉgnore`` -> ``ignore``). Length is preserved well enough for
+    line accounting since we scan line-windows, not offsets."""
+    import unicodedata
+    return unicodedata.normalize("NFKC", text).casefold()
 
 
 def _excerpt(text: str) -> str:
@@ -113,21 +124,31 @@ def _excerpt(text: str) -> str:
 
 
 def scan_text(text: str, source: str) -> list[QuarantineFinding]:
-    """Scan a blob of untrusted text; return quarantine findings (line-addressed)."""
+    """Scan a blob of untrusted text; return quarantine findings (line-addressed).
+
+    Matches over a sliding window of up to 3 consecutive lines against NFKC-folded
+    text, so single-newline splits and homoglyph/case tricks don't evade detection.
+    Each window match records the FIRST line of the window (one finding per line).
+    """
     findings: list[QuarantineFinding] = []
     if not text:
         return findings
-    for line_no, line in enumerate(text.splitlines(), start=1):
+    lines = text.splitlines()
+    flagged: dict[int, tuple[str, str, str]] = {}  # 1-based line -> (category,label,excerpt)
+    for i in range(len(lines)):
+        window_raw = "\n".join(lines[i:i + 3])
+        window = _normalize(window_raw)
         for category, label, pattern in _PATTERNS:
-            if pattern.search(line):
-                findings.append(QuarantineFinding(
-                    source=source,
-                    line=line_no,
-                    category=category,
-                    excerpt=_excerpt(line),
-                    pattern=label,
-                ))
-                break  # one finding per line is enough to quarantine it
+            if pattern.search(window):
+                line_no = i + 1
+                if line_no not in flagged:
+                    flagged[line_no] = (category, label, _excerpt(lines[i]))
+                break
+    for line_no in sorted(flagged):
+        category, label, excerpt = flagged[line_no]
+        findings.append(QuarantineFinding(
+            source=source, line=line_no, category=category, excerpt=excerpt, pattern=label,
+        ))
     return findings
 
 

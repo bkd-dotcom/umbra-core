@@ -1,6 +1,6 @@
 [project]
 name = "umbra-core"
-version = "0.1.1"
+version = "0.1.2"
 description = "An agent-agnostic change-control plane for coding agents. Governs Codex, Claude Code, Cursor, or any agent behind one admission pipeline and proves every change with a signed receipt."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "cryptography>=42.0.0",
+    "PyYAML>=6.0",
 ]
 
 [project.urls]
