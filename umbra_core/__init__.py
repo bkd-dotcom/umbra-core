@@ -2,6 +2,7 @@
 from .executors.base import ExecutionResult, Executor
 from .executors.claude_code import ClaudeCodeExecutor
 from .executors.codex import CodexExecutor
+from .executors.null import NullExecutor
 from .executors.registry import (
     available_executors,
     get_executor,
@@ -53,6 +54,7 @@ __all__ = [
     "ExecutionResult",
     "CodexExecutor",
     "ClaudeCodeExecutor",
+    "NullExecutor",
     "available_executors",
     "get_executor",
     "resolve_available",

@@ -12,10 +12,10 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v6
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
@@ -31,3 +31,47 @@ jobs:
 
       - name: Verify prompt-injection defense (ungoverned vs governed)
         run: uv run python demos/injection/demo.py
+
+  # Dogfood: umbra-core governs its own pull requests. Runs the admission
+  # pipeline on the PR's change (against .umbra/admission.yaml) and fails the
+  # check unless it earns at least Analyze (L1). This is the same governance
+  # any repo gets from the Umbra Admission action.
+  self-admission:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install
+        run: uv sync --extra dev
+
+      - name: Stage the PR change as a working-tree diff
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          git fetch --no-tags origin "$BASE_SHA" || true
+          git reset --soft "$BASE_SHA" 2>/dev/null && git restore --staged . 2>/dev/null || true
+
+      - name: Umbra self-admission
+        run: |
+          uv run umbra --json admit . \
+            --agent none \
+            --mission "Governed change to umbra-core; must stay within the repo contract and pass the suite." \
+            --label "bkd-dotcom/umbra-core" \
+            --min-authority 1 \
+            --receipt-out umbra-receipt.json | tee umbra-report.json
+
+      - name: Upload receipt
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: umbra-self-receipt
+          path: |
+            umbra-receipt.json
+            umbra-report.json
+          if-no-files-found: ignore
