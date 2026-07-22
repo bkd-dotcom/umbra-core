@@ -33,6 +33,27 @@ trust boundary, not the agent, decides what untrusted repository text the agent
 may see. Push/commit/merge tools are refused at the CLI layer, so a governed run
 can only ever *propose* a change.
 
+## Install & govern everywhere
+
+One core (`run_admission`), five checkpoints an agent's change must pass through
+— see [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md):
+
+```bash
+pip install umbra-core
+```
+
+| Surface | Governs | Command |
+|---|---|---|
+| **PyPI package** | anything you script | `pip install umbra-core` |
+| **CLI + git hook** | the agent on your machine | `umbra admit . --mission "..." --agent claude-code` |
+| **GitHub Action** | **every** agent's PR (Claude Code, Codex, Cursor, Copilot, Devin) | drop [`umbra.yml`](integrations/github-action/example-workflow.yml) |
+| **MCP server** | agents that speak MCP | `python -m umbra_core.mcp_server` |
+| **Hosted API** | any CI/agent that posts a change | see [umbra.engineer](https://umbra.engineer) |
+
+The GitHub Action is the highest-reach checkpoint: it sits at the repo, so it
+governs *any* agent that opens a PR. Make **"Umbra Admission"** a required status
+check and nothing merges without a signed receipt. `auto_merge` is always false.
+
 ## Executor interface
 
 ```python

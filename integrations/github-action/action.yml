@@ -1,0 +1,125 @@
+name: "Umbra Admission"
+description: "Govern any coding agent's change with the Umbra admission pipeline and attach a signed receipt. Works for PRs opened by Claude Code, Codex, Cursor, Copilot, Devin, or a human."
+author: "Binay Dalai"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  mission:
+    description: "The bounded task the change claims to perform (used as the agent mission / review context)."
+    required: false
+    default: "Review this pull request's change for scope, introduced secrets, and injected repository instructions."
+  min-authority:
+    description: "Minimum earned authority level required to pass (0 observe, 1 analyze, 2 branch-PR)."
+    required: false
+    default: "1"
+  agent:
+    description: "Force a specific executor (codex-cli | claude-code). Leave blank to review deterministically without invoking an agent."
+    required: false
+    default: ""
+  signing-key:
+    description: "Base64 Ed25519 signing key (32+ bytes) for stable receipts. Falls back to an honestly-flagged dev key if unset."
+    required: false
+    default: ""
+  python-version:
+    description: "Python version to run on."
+    required: false
+    default: "3.12"
+
+outputs:
+  authority-level:
+    description: "The authority level the change earned (0/1/2)."
+    value: ${{ steps.admit.outputs.authority_level }}
+  receipt-hash:
+    description: "The canonical hash of the signed receipt."
+    value: ${{ steps.admit.outputs.receipt_hash }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install umbra-core
+      shell: bash
+      run: pip install umbra-core
+
+    - name: Run admission
+      id: admit
+      shell: bash
+      env:
+        UMBRA_SIGNING_KEY: ${{ inputs.signing-key }}
+        UMBRA_ENABLE_CLAUDE_CODE: ${{ inputs.agent == 'claude-code' && 'true' || 'false' }}
+        UMBRA_ENABLE_CODEX_CLI: ${{ inputs.agent == 'codex-cli' && 'true' || 'false' }}
+      run: |
+        set -e
+        AGENT_ARG=""
+        if [ -n "${{ inputs.agent }}" ]; then AGENT_ARG="--agent ${{ inputs.agent }}"; fi
+        # Review the checked-out PR head. When no agent is forced, admission runs
+        # deterministically over the existing working tree diff against the base.
+        umbra --json admit . \
+          --mission "${{ inputs.mission }}" \
+          --label "${GITHUB_REPOSITORY}" \
+          $AGENT_ARG \
+          --min-authority "${{ inputs.min-authority }}" \
+          --receipt-out umbra-receipt.json > umbra-report.json || echo "ADMIT_FAILED=1" >> "$GITHUB_ENV"
+
+        LEVEL=$(python -c "import json;print(json.load(open('umbra-report.json'))['report']['authority_level'])" 2>/dev/null || echo 0)
+        HASH=$(python -c "import json;print(json.load(open('umbra-report.json'))['receipt']['canonical_hash'])" 2>/dev/null || echo "")
+        echo "authority_level=$LEVEL" >> "$GITHUB_OUTPUT"
+        echo "receipt_hash=$HASH" >> "$GITHUB_OUTPUT"
+
+    - name: Upload receipt artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: umbra-receipt
+        path: |
+          umbra-receipt.json
+          umbra-report.json
+        if-no-files-found: ignore
+
+    - name: Comment the verdict on the PR
+      if: always() && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let report = {};
+          try { report = JSON.parse(fs.readFileSync('umbra-report.json','utf8')).report; } catch (e) {}
+          const r = report || {};
+          const cr = r.contract_result || {};
+          const tb = r.trust_boundary || {};
+          const v = r.verifier || {};
+          const badge = { 0: '🔴 Observe (L0)', 1: '🟡 Analyze (L1)', 2: '🟢 Branch-PR (L2)' }[r.authority_level] || '—';
+          const body = [
+            '## Umbra Admission',
+            '',
+            `**Earned authority:** ${badge}`,
+            '',
+            `- **Executor:** \`${r.executor || 'n/a'}\``,
+            `- **Contract:** ${cr.passed ? 'PASS' : 'VIOLATED'}`,
+            `- **Trust boundary:** ${tb.clean ? 'clean' : `${tb.quarantined_count} injected line(s) quarantined on disk`}`,
+            `- **Independent verifier:** ${v.blocked ? 'BLOCKED' : (v.status || 'n/a')}`,
+            `- **Outcome:** ${r.outcome || ''}`,
+            '',
+            `> Signed receipt attached as the \`umbra-receipt\` artifact. \`auto_merge\` is always false — a human merges. Umbra governs the agent; it never merges.`,
+          ].join('\n');
+          if (context.issue.number) {
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+          }
+
+    - name: Enforce the authority gate
+      if: always()
+      shell: bash
+      run: |
+        LEVEL="${{ steps.admit.outputs.authority_level }}"
+        MIN="${{ inputs.min-authority }}"
+        echo "umbra: earned L$LEVEL, required >= L$MIN"
+        if [ "${LEVEL:-0}" -lt "${MIN:-1}" ]; then
+          echo "::error::Umbra: the change earned only L$LEVEL (required L$MIN). See the receipt artifact."
+          exit 1
+        fi
