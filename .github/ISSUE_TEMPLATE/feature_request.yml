@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an enhancement (new executor, contract rule, integration, etc.).
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to govern or achieve that isn't possible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like umbra-core to do? (API shape, new executor, flag, etc.)
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariants
+      options:
+        - label: This preserves the core invariants (auto_merge always false; authority earned from evidence; deterministic pipeline; receipts verify against a pinned key).
+          required: true
