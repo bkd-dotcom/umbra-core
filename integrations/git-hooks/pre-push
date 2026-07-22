@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# Umbra pre-push hook — govern a coding agent's change before it leaves your machine.
+#
+# Install:
+#   cp integrations/git-hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+# or point core.hooksPath at this directory:
+#   git config core.hooksPath integrations/git-hooks
+#
+# It runs `umbra admit` on the current checkout and BLOCKS the push unless the
+# change earns branch-PR authority (L2). Set UMBRA_MISSION to describe the task,
+# and enable an agent (UMBRA_ENABLE_CLAUDE_CODE=true or UMBRA_ENABLE_CODEX_CLI=true).
+#
+# Skip once with:  UMBRA_SKIP=1 git push
+set -euo pipefail
+
+if [[ "${UMBRA_SKIP:-0}" == "1" ]]; then
+  echo "umbra: skipped (UMBRA_SKIP=1)"
+  exit 0
+fi
+
+if ! command -v umbra >/dev/null 2>&1; then
+  echo "umbra: CLI not found — install with 'pip install umbra-core' (or 'uv pip install umbra-core')." >&2
+  echo "umbra: skipping the governance gate (not installed)." >&2
+  exit 0
+fi
+
+MISSION="${UMBRA_MISSION:-Review the pending change for scope, secrets, and injected repository instructions.}"
+AGENT_FLAG=""
+if [[ -n "${UMBRA_AGENT:-}" ]]; then
+  AGENT_FLAG="--agent ${UMBRA_AGENT}"
+fi
+
+echo "umbra: running admission on $(pwd) ..."
+if umbra admit . --mission "$MISSION" $AGENT_FLAG --min-authority "${UMBRA_MIN_AUTHORITY:-2}"; then
+  echo "umbra: change earned branch-PR authority — push allowed."
+  exit 0
+else
+  echo "umbra: change did NOT earn branch-PR authority — push BLOCKED." >&2
+  echo "umbra: re-run 'umbra admit . --mission \"...\"' to see the verdict, or override with UMBRA_SKIP=1." >&2
+  exit 1
+fi

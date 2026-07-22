@@ -33,7 +33,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-# Make the package importable when this script is run directly from anywhere.
+# Make the package importable when this script is run directly (before an install).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from umbra_core import (

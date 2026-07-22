@@ -1,0 +1,30 @@
+# Umbra Admission — governs EVERY pull request, no matter which agent opened it
+# (Claude Code, Codex, Cursor, Copilot, Devin, or a human).
+#
+# Drop this file at .github/workflows/umbra.yml in any repository.
+# Then, optionally, make "Umbra Admission" a required status check in branch
+# protection so nothing merges without an admission receipt.
+name: Umbra Admission
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # to post the verdict comment
+
+jobs:
+  admit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Umbra Admission
+        uses: bkd-dotcom/umbra-core/integrations/github-action@main
+        with:
+          min-authority: "1"          # require at least Analyze; set "2" to require branch-PR
+          # agent: "claude-code"       # optionally run a real agent; needs its auth as a secret
+          signing-key: ${{ secrets.UMBRA_SIGNING_KEY }}   # optional: stable signed receipts

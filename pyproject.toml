@@ -6,9 +6,33 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Binay Dalai" }]
+keywords = [
+    "ai-agents", "coding-agents", "governance", "supply-chain", "slsa",
+    "prompt-injection", "claude-code", "codex", "security", "change-control",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Version Control :: Git",
+]
 dependencies = [
     "cryptography>=42.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bkd-dotcom/umbra-core"
+Repository = "https://github.com/bkd-dotcom/umbra-core"
+Issues = "https://github.com/bkd-dotcom/umbra-core/issues"
+
+[project.scripts]
+umbra = "umbra_core.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -16,13 +40,16 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.6.0",
 ]
+mcp = [
+    "mcp>=1.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["umbra_core", "umbra_core/executors", "umbra_core/pipeline"]
+packages = ["umbra_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
