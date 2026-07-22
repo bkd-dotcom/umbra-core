@@ -59,12 +59,15 @@ jobs:
 
       - name: Umbra self-admission
         run: |
+          # Write outputs outside the repo tree so they don't appear in the diff.
+          OUT="${RUNNER_TEMP:-/tmp}/umbra"; mkdir -p "$OUT"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
           uv run umbra --json admit . \
             --agent none \
             --mission "Governed change to umbra-core; must stay within the repo contract and pass the suite." \
             --label "bkd-dotcom/umbra-core" \
             --min-authority 1 \
-            --receipt-out umbra-receipt.json | tee umbra-report.json
+            --receipt-out "$OUT/umbra-receipt.json" | tee "$OUT/umbra-report.json"
 
       - name: Upload receipt
         if: always()
@@ -72,6 +75,6 @@ jobs:
         with:
           name: umbra-self-receipt
           path: |
-            umbra-receipt.json
-            umbra-report.json
+            ${{ env.OUT }}/umbra-receipt.json
+            ${{ env.OUT }}/umbra-report.json
           if-no-files-found: ignore
