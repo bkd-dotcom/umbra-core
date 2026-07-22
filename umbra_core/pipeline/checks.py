@@ -29,6 +29,7 @@ CPU/memory/time limits are applied via a bounded timeout and (on POSIX) an
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import shlex
@@ -62,6 +63,24 @@ _ALLOWED_PROFILES: tuple[re.Pattern[str], ...] = (
 _SECRET_FRAGMENTS = ("OPENAI", "GITHUB", "UMBRA_FERNET", "UMBRA_SIGNING", "SESSION_SECRET",
                      "RESEND", "GOOGLE", "TOKEN", "SECRET", "PASSWORD", "API_KEY", "AWS", "GCP")
 
+# Profiles that EXECUTE repository-supplied build code (install scripts, PEP517
+# backends, arbitrary git/index URLs). Running these outside a real sandbox
+# (host-restricted) means untrusted code runs with host filesystem + network, so
+# authority is capped when they run un-sandboxed (see run_required_checks).
+_CODE_EXECUTING_PROFILES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^npm (ci|install)", re.I),
+    re.compile(r"^pnpm install", re.I),
+    re.compile(r"^yarn install", re.I),
+    re.compile(r"^pip install", re.I),
+    re.compile(r"^go build", re.I),
+    re.compile(r"^cargo build", re.I),
+)
+
+
+def _is_code_executing(cmd: str) -> bool:
+    norm = " ".join((cmd or "").split())
+    return any(p.match(norm) for p in _CODE_EXECUTING_PROFILES)
+
 
 def _output_hash(text: str) -> str:
     return "sha256:" + hashlib.sha256((text or "").encode("utf-8", "replace")).hexdigest()
@@ -84,13 +103,18 @@ class ChecksReport:
     results: list[CheckResult] = field(default_factory=list)
     ran: bool = False           # at least one required check actually executed
     all_passed: bool = False    # every declared check ran and passed (none blocked/failed/unavailable)
-    enforcement: str = "none"   # "sandboxed" | "host-restricted" | "none"
+    enforcement: str = "none"   # "sandboxed" | "network-isolated" | "host-restricted" | "none"
+    # True when a code-executing profile (npm/pip/yarn install, go/cargo build)
+    # ran WITHOUT a real sandbox (host-restricted). The caller caps authority at
+    # L1 in that case: untrusted build code executed with host fs+network.
+    unsandboxed_code_execution: bool = False
 
     def to_public(self) -> dict[str, Any]:
         return {
             "ran": self.ran,
             "all_passed": self.all_passed,
             "enforcement": self.enforcement,
+            "unsandboxed_code_execution": self.unsandboxed_code_execution,
             "results": [r.to_public() for r in self.results],
         }
 
@@ -107,8 +131,12 @@ def _scrubbed_env() -> dict[str, str]:
     from the parent environment, so nothing else (API keys, tokens, cloud creds)
     can leak into an untrusted check by construction. `_SECRET_FRAGMENTS` is used by
     the caller for defense-in-depth logging, not here.
+
+    We deliberately do NOT copy ``PYTHONPATH`` / ``NODE_PATH`` — a poisoned value
+    inherited from the parent could redirect module resolution inside the check.
+    Tools find their own toolchain via ``PATH``.
     """
-    keep = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "NODE_PATH", "PYTHONPATH", "SHELL")
+    keep = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SHELL")
     env: dict[str, str] = {k: os.environ[k] for k in keep if k in os.environ}
     # Defense-in-depth: drop any allowlisted var whose NAME still looks credential-like
     # (belt-and-suspenders against a future edit adding a risky name to `keep`).
@@ -238,6 +266,13 @@ def run_required_checks(repo_path: Path | str, commands: list[str]) -> ChecksRep
         combined = (completed.stdout or "") + (completed.stderr or "")
         passed = completed.returncode == 0
         every_ok = every_ok and passed
+        # Flag when repo-supplied build code executed outside a real sandbox.
+        if _is_code_executing(cmd) and enforcement not in ("sandboxed",):
+            report.unsandboxed_code_execution = True
+            logging.getLogger("umbra.checks").warning(
+                "Check %r executes repo-supplied build code but ran under %r (no fs/net "
+                "sandbox). Authority will be capped at L1.", cmd, enforcement,
+            )
         report.results.append(CheckResult(cmd, "passed" if passed else "failed", completed.returncode, _output_hash(combined), f"`{cmd}` exited {completed.returncode}."))
 
     report.ran = executed_any

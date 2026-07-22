@@ -156,3 +156,26 @@ def test_mcp_verify_and_provenance(tmp_path):
 
 def test_mcp_verify_bad_json():
     assert "error" in _verify("{not json")
+
+
+def test_mcp_admit_refuses_path_outside_roots(tmp_path, monkeypatch):
+    from umbra_core.mcp_server import _admit
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setenv("UMBRA_MCP_ROOTS", str(allowed))
+    res = _admit(str(outside), "mission")
+    assert "error" in res
+    assert "outside the allowed roots" in res["error"]
+
+
+def test_slsa_stamps_ephemeral_key_as_untrustworthy(tmp_path):
+    from umbra_core import to_slsa_provenance
+    receipt = _make_receipt(tmp_path)
+    env = json.loads(receipt.read_text())
+    stmt = to_slsa_provenance(env)
+    umbra = stmt["predicate"]["umbra"]
+    # The demo receipt is dev-key signed → must be flagged as not-trustworthy provenance.
+    assert umbra["key_ephemeral"] is True
+    assert umbra["provenance_trustworthy"] is False
