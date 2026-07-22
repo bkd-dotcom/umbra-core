@@ -116,7 +116,7 @@ class AdmissionReport:
 
 def _git(repo_path: Path, args: list[str]) -> str:
     try:
-        r = subprocess.run(["git", *args], cwd=repo_path, text=True, capture_output=True, check=False)
+        r = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=repo_path, text=True, capture_output=True, check=False)
         return r.stdout or ""
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -415,6 +415,19 @@ def _decide_authority(report: AdmissionReport, contract_result, verifier_report,
         else:
             report.blocked_reason = "Required checks ran but did not all pass."
             report.outcome = "ADMITTED (analyze) — in scope, but a required check failed, so branch-PR authority is withheld pending human validation."
+    elif contract.required_checks and (report.check_diagnosis or {}).get("status") not in (None, "clean", "fixed_suite"):
+        # Post-change checks all pass, but the baseline comparison is not clean and
+        # not a legitimate suite-fix. This guards against an agent earning L2 by
+        # WEAKENING a check that wasn't green at baseline (e.g. editing conftest/
+        # test config so the check now trivially passes). Require a clean baseline
+        # or an explicit fixed_suite to grant branch-PR authority.
+        report.authority_level = 1
+        report.blocked_reason = (
+            "Post-change checks pass, but the baseline was not clean "
+            f"(diagnosis: {(report.check_diagnosis or {}).get('status')}). Withholding branch-PR "
+            "authority so a change cannot earn L2 by weakening a previously-failing check."
+        )
+        report.outcome = "ADMITTED (analyze) — checks pass now but the baseline was not clean; branch-PR authority is withheld pending human validation of the check change."
     else:
         report.authority_level = 2
         report.outcome = "ADMITTED (branch PR) — the agent stayed in scope, required checks passed, and the change was independently verified; it may prepare a branch-only PR. Human approval is still required to merge."

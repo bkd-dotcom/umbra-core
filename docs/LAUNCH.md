@@ -61,8 +61,11 @@ For every pull request it runs a deterministic pipeline:
   paths, diff budget, and required checks — evaluated outside the model, fails closed.
 - **Trust boundary** redacts flagged manipulation *on disk before the agent runs*
   — it can't read what isn't there.
-- **Required checks** run in a secret-stripped, isolated environment.
-- **Independent verifier** — the patch-writer never approves its own patch.
+- **Required checks** run only allowlisted profiles with a secret-stripped env,
+  under the strongest isolation that preflights (recorded honestly: `sandboxed`
+  on Linux with bubblewrap, else `network-isolated` or `host-restricted`).
+- **Independent verifier** — the patch-writer never approves its own patch
+  (blocking checks: contract-compliance + secret-scan; the rest is advisory evidence).
 - **Earned authority** (0 observe · 1 analyze · 2 branch-PR) — a result of
   evidence, never a setting.
 - **Ed25519-signed receipt** that maps to in-toto/SLSA provenance and enters an

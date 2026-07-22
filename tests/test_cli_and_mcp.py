@@ -43,18 +43,28 @@ def _make_receipt(tmp_path: Path) -> Path:
 # --- CLI: verify / provenance / brake (no live agent needed) ----------------
 
 def test_cli_verify_ok(tmp_path, capsys):
+    from umbra_core import public_key_b64
     receipt = _make_receipt(tmp_path)
-    rc = cli_main(["verify", str(receipt)])
+    rc = cli_main(["verify", str(receipt), "--public-key", public_key_b64()])
     assert rc == 0
     assert "VERIFIED" in capsys.readouterr().out
 
 
+def test_cli_verify_refuses_dev_key_without_pin(tmp_path, capsys):
+    # SECURITY: without --public-key and on the dev key, verify must refuse.
+    receipt = _make_receipt(tmp_path)
+    rc = cli_main(["verify", str(receipt)])
+    assert rc == 1
+    assert "NOT VERIFIED" in capsys.readouterr().out
+
+
 def test_cli_verify_tampered_fails(tmp_path, capsys):
+    from umbra_core import public_key_b64
     receipt = _make_receipt(tmp_path)
     env = json.loads(receipt.read_text())
     env["receipt"]["authority_level"] = 99  # tamper
     receipt.write_text(json.dumps(env))
-    rc = cli_main(["verify", str(receipt)])
+    rc = cli_main(["verify", str(receipt), "--public-key", public_key_b64()])
     assert rc == 1
     assert "NOT VERIFIED" in capsys.readouterr().out
 
@@ -134,9 +144,12 @@ def test_cli_admit_end_to_end_via_registry(tmp_path, monkeypatch, capsys):
 # --- MCP tool functions -----------------------------------------------------
 
 def test_mcp_verify_and_provenance(tmp_path):
+    from umbra_core import public_key_b64
     receipt = _make_receipt(tmp_path)
     env_text = receipt.read_text()
-    assert _verify(env_text)["verified"] is True
+    assert _verify(env_text, public_key_b64())["verified"] is True
+    # Without an explicit key, a dev-key receipt is refused.
+    assert _verify(env_text)["verified"] is False
     stmt = _provenance(env_text)
     assert stmt["predicateType"].startswith("https://slsa.dev/provenance")
 

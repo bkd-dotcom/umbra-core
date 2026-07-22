@@ -179,7 +179,11 @@ def run_governed(live: str | None) -> dict[str, Any]:
             authority=report.authority, executor=report.executor, diff=report.diff,
             checks=report.checks, model_identity=report.model_identity, outcome=report.outcome,
         )
-        verification = verify_receipt(envelope)
+        # Verify against THIS instance's own public key (pinned). With the dev key
+        # this proves "issued by this instance, untampered"; in production set
+        # UMBRA_SIGNING_KEY and verifiers pin the published production key.
+        from umbra_core import public_key_b64
+        verification = verify_receipt(envelope, expected_public_key=public_key_b64())
         passport = issue_passport(report, receipt_hash=envelope["canonical_hash"])
         slsa = to_slsa_provenance(envelope)
         return {

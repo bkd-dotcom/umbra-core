@@ -125,7 +125,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
         _print(result, True)
     else:
         ok = result["verified"]
-        print(("VERIFIED" if ok else "NOT VERIFIED") + f"  (issued_by_umbra={result['issued_by_umbra']}, hash_matches={result['hash_matches']})")
+        if not ok and result.get("reason"):
+            print("NOT VERIFIED  — " + result["reason"])
+        else:
+            print(("VERIFIED" if ok else "NOT VERIFIED") + f"  (issued_by_umbra={result['issued_by_umbra']}, hash_matches={result['hash_matches']})")
     return 0 if result["verified"] else 1
 
 

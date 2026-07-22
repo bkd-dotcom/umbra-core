@@ -30,12 +30,18 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # Files most likely to carry agent-directed text. Used when scanning a checkout.
+# Covers the common coding-agent instruction-file conventions in use as of 2026.
 UNTRUSTED_SOURCES = (
     "README.md", "README", "README.rst",
     "CONTRIBUTING.md", "CONTRIBUTING",
     ".github/CONTRIBUTING.md",
     "docs/README.md",
-    "AGENTS.md", "CLAUDE.md", ".cursorrules",
+    # Agent instruction files (auto-ingested by various agents).
+    "AGENTS.md", "CLAUDE.md", "GEMINI.md",
+    ".cursorrules", ".clinerules", ".windsurfrules", ".aider.conf.yml",
+    ".github/copilot-instructions.md",
+    # Attacker-controlled templates a review agent may read.
+    ".github/PULL_REQUEST_TEMPLATE.md", ".github/pull_request_template.md",
 )
 
 _EXCERPT_MAX = 160
@@ -172,6 +178,42 @@ def scan_context(text: str, source: str) -> TrustBoundaryResult:
     return result
 
 
+def _safe_regular_file(root, rel):
+    """Return the resolved Path for ``root/rel`` iff it is a REGULAR file that
+    stays inside ``root`` and is not a symlink; else None.
+
+    Guards against a malicious repo shipping an instruction file (README.md, …)
+    as a symlink to something outside the checkout (~/.ssh/authorized_keys,
+    ~/.aws/credentials): sanitize/restore would otherwise follow it and clobber
+    the target on a local run.
+    """
+    from pathlib import Path
+
+    root_r = Path(root).resolve()
+    p = (root_r / rel)
+    try:
+        # Reject symlinks anywhere in the final component.
+        if p.is_symlink():
+            return None
+        resolved = p.resolve()
+        if resolved != p.resolve(strict=False):
+            return None
+        # Must stay within the checkout.
+        if root_r != resolved and root_r not in resolved.parents:
+            return None
+        if not resolved.is_file():
+            return None
+        # Final guard: the real file must not be a symlink target that escaped.
+        import os
+        st = os.lstat(resolved)
+        import stat as _stat
+        if _stat.S_ISLNK(st.st_mode):
+            return None
+        return resolved
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
 def sanitize_checkout(repo_path, sources: tuple[str, ...] = UNTRUSTED_SOURCES) -> dict[str, str]:
     """Redact flagged lines in the untrusted instruction files ON DISK, in place.
 
@@ -182,34 +224,38 @@ def sanitize_checkout(repo_path, sources: tuple[str, ...] = UNTRUSTED_SOURCES) -
     so the caller can restore the originals with :func:`restore_checkout` before
     computing the change diff (so the redaction itself never appears as a change).
     Only files that actually contained a flagged line are touched.
-    """
-    from pathlib import Path
 
-    root = Path(repo_path)
+    Symlinks and paths escaping the checkout are refused (never followed), so a
+    malicious repo can't use an instruction-file symlink to clobber a host file.
+    """
+    root = repo_path
     originals: dict[str, str] = {}
     for rel in sources:
-        path = root / rel
+        target = _safe_regular_file(root, rel)
+        if target is None:
+            continue
         try:
-            if not path.is_file():
-                continue
-            raw = path.read_text(errors="replace")
+            raw = target.read_text(errors="replace")
             sanitized, count = sanitize_text(raw, rel)
             if count > 0:
                 originals[rel] = raw
-                path.write_text(sanitized)
+                target.write_text(sanitized)
         except OSError:
             continue
     return originals
 
 
 def restore_checkout(repo_path, originals: dict[str, str]) -> None:
-    """Restore the files redacted by :func:`sanitize_checkout` to their originals."""
-    from pathlib import Path
+    """Restore the files redacted by :func:`sanitize_checkout` to their originals.
 
-    root = Path(repo_path)
+    Uses the same symlink/escape guard as :func:`sanitize_checkout` so a race that
+    swaps a file for a symlink between sanitize and restore can't redirect the write."""
     for rel, text in (originals or {}).items():
+        target = _safe_regular_file(repo_path, rel)
+        if target is None:
+            continue
         try:
-            (root / rel).write_text(text)
+            target.write_text(text)
         except OSError:
             continue
 
