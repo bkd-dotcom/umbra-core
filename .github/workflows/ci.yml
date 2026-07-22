@@ -21,13 +21,13 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
 
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Test
-        run: pytest -q
+        run: uv run pytest -q
 
       - name: Verify prompt-injection defense (ungoverned vs governed)
-        run: python demos/injection/demo.py
+        run: uv run python demos/injection/demo.py
