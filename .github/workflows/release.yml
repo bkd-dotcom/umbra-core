@@ -40,9 +40,9 @@ jobs:
 
       - name: Test before publishing
         run: |
-          uv pip install --system -e ".[dev]"
-          ruff check .
-          pytest -q
+          uv sync --extra dev
+          uv run ruff check .
+          uv run pytest -q
 
       - name: Build sdist + wheel
         run: uv build
