@@ -5,6 +5,17 @@ All notable changes to **umbra-core** are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Until `1.0.0` the public API may
 change between minor versions.
 
+## [0.1.4] — 2026-07-22
+
+### Repository / tooling
+
+- Added `CODEOWNERS`, Dependabot (pip + github-actions), and a CodeQL workflow.
+- Automated the GitHub Release: on a version tag, notes are extracted from this
+  changelog and the built sdist + wheel are attached (after the PyPI publish).
+- Documentation site (MkDocs Material) publishes to GitHub Pages on release.
+
+No functional or security changes to the library since 0.1.3.
+
 ## [0.1.3] — 2026-07-22
 
 ### Security — defense in depth
@@ -90,6 +101,7 @@ change between minor versions.
 
 > Note: `0.1.0`–`0.1.2` are superseded by `0.1.3`. See [SECURITY.md](SECURITY.md).
 
+[0.1.4]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.4
 [0.1.3]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.3
 [0.1.2]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.2
 [0.1.1]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.1
