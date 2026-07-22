@@ -317,27 +317,59 @@ def _strip_dot_slash(s: str) -> str:
     return s[2:] if s.startswith("./") else s
 
 
-def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
+def is_malformed_path(path: str) -> bool:
+    """A changed-file path we refuse to reason about (and treat as a violation).
+
+    Git output that has been quoted/escaped (non-ASCII under the default
+    ``core.quotePath``), or that contains traversal/absolute/NUL/backslash
+    components, cannot be matched reliably against globs — a permissive miss
+    would be a scope bypass. We fail closed on these. (Umbra reads git paths with
+    ``core.quotePath=false`` so legitimate non-ASCII names arrive unquoted; a path
+    that still looks quoted here is anomalous.)
+    """
+    if not path:
+        return True
+    if "\x00" in path or "\\" in path:
+        return True
+    if path.startswith('"') and path.endswith('"'):
+        return True  # git-quoted (quotePath) form leaked through
+    if path.startswith("/"):
+        return True  # absolute
+    segments = _strip_dot_slash(path).split("/")
+    if any(seg == ".." for seg in segments):
+        return True  # traversal
+    return False
+
+
+def _matches_any(path: str, patterns: tuple[str, ...], *, case_insensitive: bool = False) -> bool:
     """Glob match with ``**`` support. ``fnmatch`` treats ``*`` as crossing ``/``
     so ``dir/**`` works; we also try matching the basename for bare patterns and
     for ``**/name`` patterns so a root-level file like ``.env`` still matches
-    ``**/.env*``."""
-    norm = _strip_dot_slash(path)
+    ``**/.env*``.
+
+    ``case_insensitive`` is used for ``forbidden_paths`` so that a case-insensitive
+    filesystem (macOS/APFS, Windows/NTFS) cannot be used to bypass a forbidden
+    glob by capitalizing a letter (``Deploy.yml`` vs ``deploy.yml``).
+    """
+    def _fold(s: str) -> str:
+        return s.casefold() if case_insensitive else s
+
+    norm = _fold(_strip_dot_slash(path))
     base = norm.rsplit("/", 1)[-1]
     for pat in patterns:
-        p = _strip_dot_slash(pat)
-        if fnmatch.fnmatch(norm, p):
+        p = _fold(_strip_dot_slash(pat))
+        if fnmatch.fnmatchcase(norm, p):
             return True
         # Allow "dir/**" to match "dir/x" and "dir/x/y".
         if p.endswith("/**") and (norm == p[:-3] or norm.startswith(p[:-2])):
             return True
         # Allow a bare filename pattern to match at any depth.
-        if "/" not in p and fnmatch.fnmatch(base, p):
+        if "/" not in p and fnmatch.fnmatchcase(base, p):
             return True
         # Allow "**/name" (or "**/name*") to match the basename at any depth,
         # including root level (where the "**/" prefix would otherwise require
         # at least one leading directory segment).
-        if p.startswith("**/") and fnmatch.fnmatch(base, p[3:]):
+        if p.startswith("**/") and fnmatch.fnmatchcase(base, p[3:]):
             return True
     return False
 
@@ -357,8 +389,23 @@ def evaluate_contract(changed_files: list[str], contract: Contract) -> ContractR
     checks: list[ContractCheck] = []
     violations: list[str] = []
 
-    # 1. Forbidden paths — always a violation.
-    forbidden_hits = [f for f in files if _matches_any(f, contract.forbidden_paths)]
+    # 0. Malformed / unmatchable paths — fail closed. A quoted/escaped, absolute,
+    #    or traversal path can't be matched reliably against globs, so we treat it
+    #    as a violation rather than risk a permissive miss (scope bypass).
+    malformed = [f for f in files if is_malformed_path(f)]
+    if malformed:
+        for f in malformed:
+            violations.append(f"Refused an unmatchable/malformed path (fail-closed): {f!r}")
+    checks.append(ContractCheck(
+        "path_wellformed",
+        not malformed,
+        "All changed paths are well-formed." if not malformed
+        else f"{len(malformed)} malformed/unmatchable path(s) refused: {', '.join(repr(m) for m in malformed)}",
+    ))
+
+    # 1. Forbidden paths — always a violation. Matched CASE-INSENSITIVELY so a
+    #    case-insensitive filesystem can't bypass a forbidden glob via capitalization.
+    forbidden_hits = [f for f in files if _matches_any(f, contract.forbidden_paths, case_insensitive=True)]
     if forbidden_hits:
         for hit in forbidden_hits:
             violations.append(f"Changed a forbidden path: {hit}")
@@ -368,9 +415,11 @@ def evaluate_contract(changed_files: list[str], contract: Contract) -> ContractR
         "No forbidden paths touched." if not forbidden_hits else f"Touched {len(forbidden_hits)} forbidden path(s): {', '.join(forbidden_hits)}",
     ))
 
-    # 2. Allowlist — everything must be inside allowed_paths (when set).
+    # 2. Allowlist — everything must be inside allowed_paths (when set). Matched
+    #    case-sensitively (an allowlist is an exact declaration); a malformed path
+    #    already failed step 0.
     if contract.allowed_paths:
-        outside = [f for f in files if not _matches_any(f, contract.allowed_paths)]
+        outside = [f for f in files if not is_malformed_path(f) and not _matches_any(f, contract.allowed_paths)]
         if outside:
             for f in outside:
                 violations.append(f"Changed a file outside the allowed scope: {f}")

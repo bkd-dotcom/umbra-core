@@ -17,6 +17,7 @@ from umbra_core import (
     Executor,
     build_receipt,
     load_contract,
+    public_key_b64,
     run_admission,
     verify_receipt,
     verify_signature,
@@ -215,12 +216,29 @@ def test_receipt_signs_and_verifies(repo):
         model_identity=report.model_identity,
         outcome=report.outcome,
     )
-    result = verify_receipt(envelope)
+    result = verify_receipt(envelope, expected_public_key=public_key_b64())
     assert result["verified"] is True
     assert result["issued_by_umbra"] is True
     assert result["hash_matches"] is True
     # Invariant surfaced in the signed payload.
     assert envelope["receipt"]["auto_merge"] is False
+
+
+def test_verify_refuses_dev_key_without_explicit_pin(repo):
+    # SECURITY: with the dev-fallback key and no explicit pinned key, verification
+    # must REFUSE (the dev seed is public — anyone could mint a "valid" receipt).
+    ex = FakeExecutor({"package.json": '{"dependencies": {"left-pad": "1.3.0"}}\n'})
+    report = run_admission(repo, "acme/app", "bump", ex)
+    envelope = build_receipt(
+        repo=report.repo, base_commit=report.base_commit, contract=report.contract,
+        contract_result=report.contract_result, verifier=report.verifier,
+        trust_boundary=report.trust_boundary, proposed_change=None,
+        providers=report.providers, authority_level=report.authority_level,
+        authority=report.authority, executor=report.executor, diff=report.diff,
+    )
+    result = verify_receipt(envelope)  # no expected_public_key, dev key in use
+    assert result["verified"] is False
+    assert "dev-fallback" in result.get("reason", "")
 
 
 def test_tampered_receipt_fails_verification(repo):
@@ -235,7 +253,7 @@ def test_tampered_receipt_fails_verification(repo):
     )
     # Tamper: silently upgrade the authority in the payload.
     envelope["receipt"]["authority_level"] = 99
-    result = verify_receipt(envelope)
+    result = verify_receipt(envelope, expected_public_key=public_key_b64())
     assert result["verified"] is False
 
 

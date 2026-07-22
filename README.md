@@ -138,7 +138,12 @@ envelope = build_receipt(
     authority=report.authority, executor=report.executor, diff=report.diff,
     checks=report.checks, model_identity=report.model_identity, outcome=report.outcome,
 )
-assert verify_receipt(envelope)["verified"] is True   # issued by this instance, untampered
+# Verify against a PINNED public key. In production, set UMBRA_SIGNING_KEY and
+# pin the published production key. With the dev key, pass the instance's own key
+# explicitly — verify_receipt refuses to trust the dev-fallback key by default,
+# because its seed is public in the source tree.
+from umbra_core import public_key_b64
+assert verify_receipt(envelope, expected_public_key=public_key_b64())["verified"] is True
 ```
 
 Earned authority is a **result of evidence, never a setting**: a forbidden-path
@@ -146,6 +151,24 @@ change or an introduced secret caps at `observe (0)`; an in-scope change whose
 required checks didn't run/pass caps at `analyze (1)`; only a clean, in-scope,
 checks-passed, independently-verified change earns `branch_pr (2)`. `auto_merge`
 is false at every level.
+
+### Honest enforcement scope (read before you rely on it)
+
+- **Check isolation is best-effort by platform.** Required checks run under the
+  strongest tier that *actually preflights*, recorded truthfully in the receipt's
+  `checks.enforcement`: `sandboxed` (Linux bubblewrap, fs+net isolation),
+  `network-isolated` (Linux `unshare -rn`), or `host-restricted` (allowlist +
+  secret-stripped env only — **no fs/network isolation**). On stock GitHub runners
+  and macOS there is usually no bubblewrap, so the tier is typically
+  `host-restricted`. A repo can never run an arbitrary command (allowlisted
+  profiles only), but "sandboxed" is not guaranteed everywhere — check the field.
+- **The verifier's *blocking* checks are contract-compliance and secret-scan.**
+  Advisory-cleared, tests, and citations are *advisory evidence* that lower
+  `evidence_completeness` when missing but do not by themselves block. Blocking is
+  intentionally narrow so the verdict is deterministic.
+- **Receipts signed with the dev key prove nothing to a third party** (the seed is
+  public). Set `UMBRA_SIGNING_KEY` for a real key; `verify_receipt` refuses the
+  dev key unless you pass an explicit `expected_public_key`.
 
 Set `UMBRA_SIGNING_KEY` (base64 of >=32 raw bytes) for a stable production
 signing key; without it a deterministic dev key is used and every receipt is

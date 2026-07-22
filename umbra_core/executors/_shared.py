@@ -10,8 +10,15 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 def git(repo_path: Path, args: list[str]) -> str:
-    """Run a read-only git command in the checkout and return stdout."""
-    result = subprocess.run(["git", *args], cwd=repo_path, text=True, capture_output=True, check=False)
+    """Run a read-only git command in the checkout and return stdout.
+
+    ``core.quotePath=false`` so non-ASCII filenames arrive unquoted/unescaped —
+    otherwise git wraps them in quotes with octal escapes, which no contract glob
+    would match (a scope-bypass vector)."""
+    result = subprocess.run(
+        ["git", "-c", "core.quotePath=false", *args],
+        cwd=repo_path, text=True, capture_output=True, check=False,
+    )
     return result.stdout
 
 

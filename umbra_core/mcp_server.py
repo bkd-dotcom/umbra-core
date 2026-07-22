@@ -57,12 +57,12 @@ def _admit(repo_path: str, mission: str, agent: str | None = None, label: str | 
     return {"report": report.to_public(), "receipt": envelope}
 
 
-def _verify(receipt_json: str) -> dict[str, Any]:
+def _verify(receipt_json: str, public_key: str | None = None) -> dict[str, Any]:
     try:
         envelope = json.loads(receipt_json)
     except (json.JSONDecodeError, ValueError) as exc:
         return {"error": f"invalid receipt JSON: {exc}"}
-    return verify_receipt(envelope)
+    return verify_receipt(envelope, expected_public_key=public_key)
 
 
 def _provenance(receipt_json: str) -> dict[str, Any]:
@@ -92,10 +92,11 @@ def build_server():  # pragma: no cover - exercised only when mcp is installed
         return _admit(repo_path, mission, agent, label)
 
     @mcp.tool()
-    def umbra_verify(receipt_json: str) -> dict[str, Any]:
-        """Verify a signed Umbra receipt against the pinned public key. Returns
-        whether it was issued by this instance and is untampered."""
-        return _verify(receipt_json)
+    def umbra_verify(receipt_json: str, public_key: str | None = None) -> dict[str, Any]:
+        """Verify a signed Umbra receipt against a pinned public key. Pass the
+        production public_key; without it, verification of a dev-key receipt is
+        refused (the dev seed is public)."""
+        return _verify(receipt_json, public_key)
 
     @mcp.tool()
     def umbra_provenance(receipt_json: str) -> dict[str, Any]:
