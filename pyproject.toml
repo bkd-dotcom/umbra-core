@@ -44,6 +44,9 @@ dev = [
 mcp = [
     "mcp>=1.0.0",
 ]
+docs = [
+    "mkdocs-material>=9.5.0",
+]
 
 [build-system]
 requires = ["hatchling"]

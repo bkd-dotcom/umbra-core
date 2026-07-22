@@ -1,0 +1,44 @@
+site_name: umbra-core
+site_description: An agent-agnostic change-control plane for coding agents.
+site_url: https://bkd-dotcom.github.io/umbra-core/
+repo_url: https://github.com/bkd-dotcom/umbra-core
+repo_name: bkd-dotcom/umbra-core
+edit_uri: edit/main/docs/site/
+docs_dir: docs/site
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.details
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Concepts: concepts.md
+  - GitHub Action: github-action.md
+  - Security: security.md
