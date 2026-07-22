@@ -2,6 +2,7 @@
 
 Copy-paste-ready announcement copy for umbra-core / the Umbra Admission action.
 Live links:
+- **Marketplace:** https://github.com/marketplace/actions/umbra-admission
 - Package: https://pypi.org/project/umbra-core/
 - Core: https://github.com/bkd-dotcom/umbra-core
 - Action: https://github.com/bkd-dotcom/umbra-action
@@ -33,7 +34,8 @@ branch-PR) is granted — sealed in an Ed25519-signed receipt that maps to SLSA
 provenance. Make it a required status check and nothing merges without a receipt.
 `auto_merge` is always false — a human merges.
 
-Agent-agnostic, MIT, `pip install umbra-core`.
+Agent-agnostic, MIT, `pip install umbra-core`. On the GitHub Marketplace:
+https://github.com/marketplace/actions/umbra-admission
 
 ---
 

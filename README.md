@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/umbra-core.svg)](https://pypi.org/project/umbra-core/)
 [![CI](https://github.com/bkd-dotcom/umbra-core/actions/workflows/ci.yml/badge.svg)](https://github.com/bkd-dotcom/umbra-core/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/pypi/pyversions/umbra-core.svg)](https://pypi.org/project/umbra-core/)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Umbra%20Admission-purple?logo=github)](https://github.com/marketplace/actions/umbra-admission)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **An agent-agnostic change-control plane for coding agents.**
@@ -51,7 +52,7 @@ pip install umbra-core
 |---|---|---|
 | **PyPI package** | anything you script | `pip install umbra-core` |
 | **CLI + git hook** | the agent on your machine | `umbra admit . --mission "..." --agent claude-code` |
-| **GitHub Action** | **every** agent's PR (Claude Code, Codex, Cursor, Copilot, Devin) | [`bkd-dotcom/umbra-action@v1`](https://github.com/bkd-dotcom/umbra-action) |
+| **GitHub Action** | **every** agent's PR (Claude Code, Codex, Cursor, Copilot, Devin) | [Marketplace: Umbra Admission](https://github.com/marketplace/actions/umbra-admission) · [`@v1`](https://github.com/bkd-dotcom/umbra-action) |
 | **MCP server** | agents that speak MCP | `python -m umbra_core.mcp_server` |
 | **Hosted API** | any CI/agent that posts a change | see [umbra.engineer](https://umbra.engineer) |
 
