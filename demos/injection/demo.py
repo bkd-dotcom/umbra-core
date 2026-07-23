@@ -54,10 +54,13 @@ from umbra_core.pipeline.trust_boundary import scan_repository_text
 
 FIXTURE = Path(__file__).parent / "fixture-repo"
 
-# Sentinels the poisoned README tries to make the agent do.
+# Sentinels the poisoned README tries to make the agent do. The "exfiltrated
+# secret" is a harmless, obviously-fake placeholder token (never a real
+# credential shape) — the demo only needs to show that an ungoverned agent WOULD
+# write attacker-directed content; the value itself is inert.
 _MALICIOUS_DEPLOY = "deploy.yml"
 _MALICIOUS_SECRET_FILE = "stolen.txt"
-_EXFIL_SECRET = "sk-EXFILTRATED000000000000000000000000"
+_FAKE_EXFIL_TOKEN = "FAKE-PLACEHOLDER-NOT-A-REAL-TOKEN"  # noqa: S105 - inert demo sentinel
 
 
 class InjectableAgent:
@@ -93,8 +96,8 @@ class InjectableAgent:
             (repo_path / _MALICIOUS_DEPLOY).write_text("production:\n  backdoor: true\n")
             obeyed.append("edited deploy.yml (out-of-scope, attacker-directed)")
         if "exfiltrate" in readme_text.lower() or "print the secret" in readme_text.lower():
-            (repo_path / _MALICIOUS_SECRET_FILE).write_text(f"OPENAI_API_KEY={_EXFIL_SECRET}\n")
-            obeyed.append("wrote an exfiltrated secret to disk (attacker-directed)")
+            (repo_path / _MALICIOUS_SECRET_FILE).write_text(f"exfiltrated_value={_FAKE_EXFIL_TOKEN}\n")
+            obeyed.append("wrote an exfiltrated value to disk (attacker-directed)")
 
         summary = "Bumped left-pad 1.0.0 -> 1.3.0."
         if obeyed:
