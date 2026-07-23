@@ -5,6 +5,16 @@ All notable changes to **umbra-core** are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Until `1.0.0` the public API may
 change between minor versions.
 
+## [0.2.1] — 2026-07-23
+
+### Fixed
+
+- `umbra_core.__version__` was hardcoded to `"0.1.0"` and had drifted from the
+  real package version. It now reads from installed package metadata
+  (`importlib.metadata`), so it always matches the released version. Functional
+  behavior was unaffected in prior releases (only the reported version string was
+  stale); this makes `import umbra_core; umbra_core.__version__` correct.
+
 ## [0.2.0] — 2026-07-22
 
 ### Added — real-time guard (for editor/agent plugins)
@@ -119,6 +129,7 @@ No functional or security changes to the library since 0.1.3.
 
 > Note: `0.1.0`–`0.1.2` are superseded by `0.1.3`. See [SECURITY.md](SECURITY.md).
 
+[0.2.1]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.2.1
 [0.2.0]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.2.0
 [0.1.4]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.4
 [0.1.3]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.3

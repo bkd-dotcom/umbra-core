@@ -49,7 +49,12 @@ from .pipeline import (
     verify_signature,
 )
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import version as _pkg_version
+
+    __version__ = _pkg_version("umbra-core")
+except Exception:  # noqa: BLE001 - source checkout without installed metadata
+    __version__ = "0.0.0+local"
 
 __all__ = [
     # executors
