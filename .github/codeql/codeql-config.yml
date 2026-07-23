@@ -1,0 +1,13 @@
+# CodeQL configuration — scope analysis to the shipped library.
+# demos/ and tests/ are scaffolding (not part of the umbra_core package that
+# ships to PyPI). The injection demo intentionally simulates an agent writing/
+# printing an attacker-directed value, which trips clear-text-data heuristics on
+# code that is illustrative, not production. We analyze the real package instead.
+name: "umbra-core CodeQL config"
+
+paths:
+  - "umbra_core"
+
+paths-ignore:
+  - "demos"
+  - "tests"
