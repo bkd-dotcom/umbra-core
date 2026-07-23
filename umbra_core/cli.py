@@ -23,6 +23,7 @@ from . import (
     JsonFilePassportStore,
     build_receipt,
     get_executor,
+    guard,
     issue_passport,
     resolve_available,
     revoke,
@@ -153,6 +154,48 @@ def cmd_provenance(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_guard(args: argparse.Namespace) -> int:
+    """Fast pre-action check for editor/agent hooks: allow/deny a single proposed
+    file path and/or shell command against the repo's contract.
+
+    Reads from --path/--command, or from a Claude Code hook JSON payload on stdin
+    (tool_input.file_path / tool_input.command). With --hook-output, emits Claude
+    Code's PreToolUse decision JSON and always exits 0 (the JSON carries the deny)."""
+    path = args.path
+    command = args.command
+    if args.stdin_json:
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except (json.JSONDecodeError, ValueError):
+            payload = {}
+        ti = payload.get("tool_input") or {}
+        path = path or ti.get("file_path") or ti.get("path") or ti.get("notebook_path")
+        command = command or ti.get("command")
+
+    decision = guard(repo_path=args.repo, path=path, command=command)
+
+    if args.hook_output:
+        # Claude Code PreToolUse hook format. "deny" blocks the tool call; on
+        # allow we stay silent (exit 0, no decision) so normal flow continues.
+        if decision.allowed:
+            print("{}")
+        else:
+            print(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"Umbra: {decision.reason}",
+                }
+            }))
+        return 0
+
+    if args.json:
+        _print(decision.to_public(), True)
+    else:
+        print(("ALLOW" if decision.allowed else "DENY") + f"  {decision.reason}")
+    return 0 if decision.allowed else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="umbra", description="Agent-agnostic change-control plane for coding agents.")
     parser.add_argument("--json", action="store_true", help="Machine-readable JSON output.")
@@ -185,6 +228,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_prov = sub.add_parser("provenance", help="Emit an in-toto/SLSA provenance statement for a receipt.")
     p_prov.add_argument("receipt", help="Path to a receipt envelope JSON file.")
     p_prov.set_defaults(func=cmd_provenance)
+
+    p_guard = sub.add_parser("guard", help="Fast pre-action check for editor/agent hooks: allow/deny one file path or command against the contract.")
+    p_guard.add_argument("--repo", default=".", help="Repo checkout to load the contract from (default: current dir).")
+    p_guard.add_argument("--path", help="A proposed file path the agent is about to write/edit.")
+    p_guard.add_argument("--command", help="A proposed shell command the agent is about to run.")
+    p_guard.add_argument("--stdin-json", action="store_true", help="Read a Claude Code hook JSON payload from stdin (tool_input.file_path / .command).")
+    p_guard.add_argument("--hook-output", action="store_true", help="Emit Claude Code PreToolUse decision JSON (deny blocks; exit 0).")
+    p_guard.set_defaults(func=cmd_guard)
 
     return parser
 

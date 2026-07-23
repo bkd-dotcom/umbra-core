@@ -15,6 +15,7 @@ from .contract import (
     evaluate_contract,
     load_contract,
 )
+from .guard import GuardDecision, guard, guard_command, guard_path
 from .passport import (
     InMemoryPassportStore,
     JsonFilePassportStore,
@@ -67,6 +68,10 @@ __all__ = [
     "default_contract",
     "evaluate_contract",
     "load_contract",
+    "guard",
+    "guard_path",
+    "guard_command",
+    "GuardDecision",
     "ChecksReport",
     "CheckResult",
     "run_required_checks",
