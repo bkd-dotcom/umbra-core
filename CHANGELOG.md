@@ -5,6 +5,24 @@ All notable changes to **umbra-core** are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Until `1.0.0` the public API may
 change between minor versions.
 
+## [0.2.0] — 2026-07-22
+
+### Added — real-time guard (for editor/agent plugins)
+
+- **`umbra guard`** — a fast, deterministic pre-action check for editor/agent
+  hooks. Given one proposed file path and/or shell command, it allows or denies
+  against the repo's `.umbra/admission.yaml` — instantly, no model, no network.
+- Python API: `guard(repo_path, path=..., command=...) -> GuardDecision`.
+- `umbra guard --stdin-json --hook-output` emits Claude Code `PreToolUse`
+  decision JSON, so a Claude Code plugin hook can **block** an out-of-scope or
+  forbidden edit/command *before it happens* — governance from inside the editor,
+  run by deterministic code (not the model).
+- Blocks dangerous shell patterns (`curl|bash`, `rm -rf /`, reading `.env`/keys,
+  `git push`, `gh secret`, …) and checks any file a command writes against scope.
+
+This is the primitive behind the Umbra editor plugins (Claude Code, Cursor,
+Codex). It is a pre-flight guard, not a replacement for full admission.
+
 ## [0.1.4] — 2026-07-22
 
 ### Repository / tooling
@@ -101,6 +119,7 @@ No functional or security changes to the library since 0.1.3.
 
 > Note: `0.1.0`–`0.1.2` are superseded by `0.1.3`. See [SECURITY.md](SECURITY.md).
 
+[0.2.0]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.2.0
 [0.1.4]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.4
 [0.1.3]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.3
 [0.1.2]: https://github.com/bkd-dotcom/umbra-core/releases/tag/v0.1.2
