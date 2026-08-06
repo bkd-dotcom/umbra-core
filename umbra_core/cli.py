@@ -73,7 +73,8 @@ def cmd_admit(args: argparse.Namespace) -> int:
         if not executor.available():
             print(
                 f"error: agent {args.agent!r} is not available. Enable + authenticate it "
-                f"(e.g. UMBRA_ENABLE_CLAUDE_CODE=true / UMBRA_ENABLE_CODEX_CLI=true).",
+                "(e.g. UMBRA_ENABLE_AIDER=true / UMBRA_ENABLE_CLAUDE_CODE=true / "
+                "UMBRA_ENABLE_CODEX_CLI=true).",
                 file=sys.stderr,
             )
             return 2
@@ -82,7 +83,8 @@ def cmd_admit(args: argparse.Namespace) -> int:
         if executor is None:
             print(
                 "error: no coding agent is available. Enable one with "
-                "UMBRA_ENABLE_CLAUDE_CODE=true or UMBRA_ENABLE_CODEX_CLI=true, "
+                "UMBRA_ENABLE_AIDER=true, UMBRA_ENABLE_CLAUDE_CODE=true, or "
+                "UMBRA_ENABLE_CODEX_CLI=true, "
                 "or pass --agent.",
                 file=sys.stderr,
             )

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from umbra_core import (
+    AiderExecutor,
     ClaudeCodeExecutor,
     CodexExecutor,
     ExecutionResult,
@@ -42,7 +43,7 @@ class FakeRunner:
         self.calls.append(list(command))
         key = f"{command[0]}:{command[1] if len(command) > 1 else ''}"
         # Simulate the agent editing a file inside the checkout on the exec/print call.
-        if self._edit_file is not None and command[0] in {"codex", "claude"} and command[1] in {"exec", "-p"}:
+        if self._edit_file is not None and command[0] in {"aider", "codex", "claude"} and command[1] in {"--message", "exec", "-p"}:
             self._edit_file.write_text(self._edit_text)
         return self.responses.get(key, FakeCompleted())
 
@@ -61,12 +62,14 @@ def git_repo(tmp_path) -> Path:
 # --- protocol / registry ----------------------------------------------------
 
 def test_both_executors_satisfy_protocol():
+    assert isinstance(AiderExecutor(), Executor)
     assert isinstance(CodexExecutor(), Executor)
     assert isinstance(ClaudeCodeExecutor(), Executor)
 
 
 def test_registry_lists_and_resolves():
-    assert set(available_executors()) == {"codex-cli", "claude-code", "none"}
+    assert set(available_executors()) == {"aider", "codex-cli", "claude-code", "none"}
+    assert isinstance(get_executor("aider"), AiderExecutor)
     assert isinstance(get_executor("codex-cli"), CodexExecutor)
     assert isinstance(get_executor("claude-code"), ClaudeCodeExecutor)
     assert isinstance(get_executor("none"), NullExecutor)
@@ -78,6 +81,7 @@ def test_registry_unknown_raises():
 
 
 def test_resolve_available_none_when_disabled(monkeypatch):
+    monkeypatch.delenv("UMBRA_ENABLE_AIDER", raising=False)
     monkeypatch.delenv("UMBRA_ENABLE_CODEX_CLI", raising=False)
     monkeypatch.delenv("UMBRA_ENABLE_CLAUDE_CODE", raising=False)
     # NullExecutor is always available but must NEVER be auto-selected.
@@ -101,6 +105,16 @@ def test_null_executor_makes_no_change_and_is_protocol():
 def test_codex_unavailable_without_flag(monkeypatch):
     monkeypatch.delenv("UMBRA_ENABLE_CODEX_CLI", raising=False)
     assert CodexExecutor(runner=FakeRunner({})).available() is False
+
+
+def test_aider_available_only_with_flag_and_cli(monkeypatch):
+    runner = FakeRunner({"aider:--version": FakeCompleted(stdout="aider 0.86.2")})
+    monkeypatch.delenv("UMBRA_ENABLE_AIDER", raising=False)
+    assert AiderExecutor(runner=runner).available() is False
+    monkeypatch.setenv("UMBRA_ENABLE_AIDER", "true")
+    assert AiderExecutor(runner=FakeRunner({})).available() is False
+    assert AiderExecutor(runner=runner).available() is True
+    assert isinstance(resolve_available(["aider"], runner=runner), AiderExecutor)
 
 
 def test_codex_model_allowlist_native(monkeypatch):
@@ -186,6 +200,43 @@ def test_codex_propose_captures_diff(monkeypatch, git_repo):
     assert "app.py" in res.files
     assert "x = 2" in res.diff
     assert res.model_identity["executor"] == "codex-cli"
+
+
+def test_aider_propose_captures_diff_without_commit_authority(monkeypatch, git_repo):
+    monkeypatch.setenv("UMBRA_ENABLE_AIDER", "true")
+    runner = FakeRunner(
+        {
+            "aider:--version": FakeCompleted(stdout="aider 0.86.2"),
+            "aider:--message": FakeCompleted(returncode=0, stdout="Bumped x to 2"),
+        },
+        edit_file=git_repo / "app.py",
+        edit_text="x = 2\n",
+    )
+    result = AiderExecutor(runner=runner, model="openrouter/example-model").propose(
+        "bump x",
+        git_repo,
+    )
+
+    assert result.executor == "aider"
+    assert "x = 2" in result.diff
+    assert result.model_identity["model_configured"] == "openrouter/example-model"
+    call = next(c for c in runner.calls if c[0] == "aider" and c[1] == "--message")
+    assert "--no-auto-commits" in call
+    assert "--no-suggest-shell-commands" in call
+    assert "bump x" not in " ".join(result.command or [])
+
+
+def test_aider_read_only_uses_dry_run(monkeypatch, git_repo):
+    monkeypatch.setenv("UMBRA_ENABLE_AIDER", "true")
+    runner = FakeRunner(
+        {
+            "aider:--version": FakeCompleted(stdout="aider 0.86.2"),
+            "aider:--message": FakeCompleted(returncode=0, stdout="analysis"),
+        }
+    )
+    AiderExecutor(runner=runner).propose("review", git_repo, read_only=True)
+    call = next(c for c in runner.calls if c[0] == "aider" and c[1] == "--message")
+    assert "--dry-run" in call
 
 
 def test_claude_propose_captures_diff_and_parses_json(monkeypatch, git_repo):

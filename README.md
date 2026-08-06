@@ -127,13 +127,13 @@ authority the change earned and proves it, a human merges.
 from umbra_core import resolve_available, get_executor
 
 # pick the first available agent (honoring a preference order)
-agent = resolve_available(["claude-code", "codex-cli"])
+agent = resolve_available(["aider", "claude-code", "codex-cli"])
 
 # or ask for one explicitly
 agent = get_executor("claude-code")
 
 result = agent.propose("bump the vulnerable dependency", repo_path=checkout)
-print(result.executor)         # "claude-code" | "codex-cli" | "unavailable"
+print(result.executor)         # "aider" | "claude-code" | "codex-cli" | "unavailable"
 print(result.diff)             # recomputed from git on the final tree
 print(result.model_identity)   # honest provenance for the receipt
 ```
@@ -142,6 +142,7 @@ Enable agents via environment flags (off by default, fail-closed):
 
 - `UMBRA_ENABLE_CODEX_CLI=true` (+ `codex login`)
 - `UMBRA_ENABLE_CLAUDE_CODE=true` (+ authenticated `claude` CLI)
+- `UMBRA_ENABLE_AIDER=true` (+ an Aider-supported model provider)
 
 ## The admission pipeline
 

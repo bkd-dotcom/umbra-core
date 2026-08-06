@@ -1,4 +1,5 @@
 """umbra-core — an agent-agnostic change-control plane for coding agents."""
+from .executors.aider import AiderExecutor
 from .executors.base import ExecutionResult, Executor
 from .executors.claude_code import ClaudeCodeExecutor
 from .executors.codex import CodexExecutor
@@ -71,6 +72,7 @@ __all__ = [
     # executors
     "Executor",
     "ExecutionResult",
+    "AiderExecutor",
     "CodexExecutor",
     "ClaudeCodeExecutor",
     "NullExecutor",

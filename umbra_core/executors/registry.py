@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 from typing import Callable
 
+from .aider import AiderExecutor
 from .base import Executor
 from .claude_code import ClaudeCodeExecutor
 from .codex import CodexExecutor
@@ -18,6 +19,7 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 # name -> factory(runner) -> Executor
 _REGISTRY: dict[str, Callable[[Runner], Executor]] = {
+    "aider": lambda runner: AiderExecutor(runner=runner),
     "codex-cli": lambda runner: CodexExecutor(runner=runner),
     "claude-code": lambda runner: ClaudeCodeExecutor(runner=runner),
     "none": lambda runner: NullExecutor(),  # govern an existing working-tree change
