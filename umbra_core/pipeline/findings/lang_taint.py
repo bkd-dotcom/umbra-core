@@ -170,7 +170,23 @@ _CSHARP = LangTaintSpec(
     ),
 )
 
-_SPECS: list[LangTaintSpec] = [_GO, _JAVA, _PHP, _RUBY, _CSHARP]
+_JS = LangTaintSpec(
+    exts=(".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"),
+    source=re.compile(r"\breq\.(query|params|body|headers|cookies)\b"),
+    assign=re.compile(r"^\s*(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(.+);?\s*$"),
+    concat=re.compile(r"\+|\$`|\$\{"),
+    sanitizer=re.compile(r"encodeURIComponent|sanitizeUrl|allowlist"),
+    sinks=(
+        SinkSpec("js.taint.ssrf", "ssrf", "CWE-918",
+                 "Server-Side Request Forgery (SSRF) via user input (taint)",
+                 "An HTTP request is sent to a URL derived from user input.",
+                 "Allowlist permitted destination URLs; validate protocol and host.",
+                 re.compile(r"\b(fetch|axios(?:\.get|\.post|\.request)?|http\.get|https\.get|request|got|superagent)\s*\("),
+                 requires_concat=False, confidence=0.8),
+    ),
+)
+
+_SPECS: list[LangTaintSpec] = [_GO, _JAVA, _PHP, _RUBY, _CSHARP, _JS]
 _EXT_TO_SPEC: dict[str, LangTaintSpec] = {e: s for s in _SPECS for e in s.exts}
 
 LANG_TAINT_EXTS = frozenset(_EXT_TO_SPEC)
