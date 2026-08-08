@@ -749,3 +749,29 @@ def test_treesitter_graceful_when_absent(tmp_path):
                                    '    db.Query("SELECT " + r.URL.Query().Get("id"))\n}\n')
     report = scan_repository(tmp_path, use_treesitter=True)
     assert "treesitter" in report.layers or "treesitter" in report.layers_unavailable
+
+
+def test_js_ssrf_detection_and_safe_case(tmp_path):
+    vuln_code = """
+    app.get("/fetch", async (req, res) => {
+        const url = req.query.target;
+        await fetch(url);
+    });
+    """
+    safe_code = """
+    app.get("/fetch", async (req, res) => {
+        const url = "https://api.example.com/data";
+        await fetch(url);
+    });
+    """
+    (tmp_path / "vuln.js").write_text(vuln_code)
+    (tmp_path / "safe.js").write_text(safe_code)
+
+    report = scan_repository(tmp_path)
+
+    vuln_ssrf = [f for f in report.findings if f.file == "vuln.js" and f.category == "ssrf"]
+    assert len(vuln_ssrf) >= 1
+    assert vuln_ssrf[0].cwe == "CWE-918"
+
+    safe_ssrf = [f for f in report.findings if f.file == "safe.js" and f.category == "ssrf"]
+    assert len(safe_ssrf) == 0

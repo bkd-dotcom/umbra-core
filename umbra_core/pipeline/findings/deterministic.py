@@ -394,6 +394,11 @@ _JS_RULES: list[tuple] = [
      "Dynamic code execution via eval()",
      "eval() executes arbitrary code; on user input this is RCE.",
      "Remove eval; use explicit parsing/dispatch.", 0.8),
+    ("js.ssrf", "ssrf", Severity.HIGH, "CWE-918",
+     re.compile(r"(?i)\b(fetch|axios(?:\.get|\.post|\.request)?|http\.get|https\.get|request|got|superagent)\s*\(\s*(?:req\.(query|params|body|headers)|`[^`]*\$\{req\.(query|params|body|headers)|['\"][^'\"]*['\"]\s*\+\s*req\.(query|params|body|headers))"),
+     "Server-Side Request Forgery (SSRF) via HTTP request",
+     "An HTTP request fetches a URL built directly from user input.",
+     "Allowlist target URLs/domains; do not fetch arbitrary user-supplied URLs.", 0.82),
 ]
 
 # XSS: unescaped user input written into an HTML/response string. Language-agnostic
